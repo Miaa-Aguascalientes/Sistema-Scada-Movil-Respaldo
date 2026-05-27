@@ -694,13 +694,15 @@ if st.session_state.activo_tipo == "Pozo" and st.session_state.activo_id != "-- 
         )
 
 
-elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-- Seleccionar --":
+# ------------------------------------------------------------------------------
+# SECCIÓN DE TANQUES
+# ------------------------------------------------------------------------------
+if st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-- Seleccionar --":
     id_tq = st.session_state.activo_id
     info_t = mapa_tanques_dict.get(id_tq)
     
     st.markdown(f"<h3 style='color:#00d4ff;'>🛢️  Análisis de Nivel: {info_t['nombre']}</h3>", unsafe_allow_html=True)
 
-    # --- DATOS ---
     data_tq = cargar_datos_scada([info_t['tag_nivel']])
     ultimo_nivel, fecha_lectura = data_tq.get(info_t['tag_nivel'], (0.0, "N/A"))
     
@@ -711,7 +713,7 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
         </div>
     ''', unsafe_allow_html=True)
 
-    # --- RANGO ---
+    # Selección de rango
     opciones = ["Hoy", "Ayer", "Últimos 7 días", "Últimos 14 días", "Este Mes", "Personalizado"]
     opcion_fecha = st.selectbox("Selecciona rango:", opciones, index=2)
     hoy_dt = datetime.now()
@@ -732,40 +734,31 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
         if not df_hist.empty:
             df_hist['FECHA'] = pd.to_datetime(df_hist['FECHA'])
             
-            # 1. GRÁFICO REAL
+            # Gráfico Real
             st.markdown("<h4 style='color:#00d4ff;'>📊 Nivel Histórico Real</h4>", unsafe_allow_html=True)
             fig_real = go.Figure(go.Scatter(x=df_hist['FECHA'], y=df_hist['VALUE'], name="Nivel Real", line=dict(color='#00d4ff', width=2), mode='lines+markers'))
             fig_real.update_layout(template="plotly_dark", height=300, hovermode="x unified", margin=dict(t=30, b=30))
             st.plotly_chart(fig_real, use_container_width=True)
 
-            # 2. GRÁFICO DE PREDICCIÓN (CONECTADO)
+            # Gráfico de Predicción (Curvado y conectado)
             st.markdown("<h4 style='color:#ffaa00;'>🔮 Predicción de Nivel</h4>", unsafe_allow_html=True)
-            
-            # Ajuste Polinómico para la curva
             df_pred = df_hist.tail(40).copy()
             df_pred['H'] = (df_pred['FECHA'] - df_pred['FECHA'].iloc[0]).dt.total_seconds() / 3600
             z = np.polyfit(df_pred['H'], df_pred['VALUE'], 2)
             p = np.poly1d(z)
             
-            # Proyección
             ultima_fecha = df_pred['FECHA'].iloc[-1]
             ultima_h = df_pred['H'].iloc[-1]
             futuro_h = np.linspace(ultima_h, ultima_h + 168, 20)
             prediccion = p(futuro_h)
             fechas_f = [ultima_fecha + timedelta(hours=float(h - ultima_h)) for h in futuro_h]
             
-            # Unir puntos para continuidad
-            x_plot = [ultima_fecha] + fechas_f
-            y_plot = [df_pred['VALUE'].iloc[-1]] + list(prediccion)
-            
             fig_pred = go.Figure()
-            fig_pred.add_trace(go.Scatter(x=x_plot, y=y_plot, name="Predicción", line=dict(color='#ffaa00', width=3, dash='dash')))
-            fig_pred.add_trace(go.Scatter(x=df_pred['FECHA'], y=df_pred['VALUE'], name="Histórico Reciente", line=dict(color='#00d4ff', width=2)))
+            fig_pred.add_trace(go.Scatter(x=[ultima_fecha] + fechas_f, y=[df_pred['VALUE'].iloc[-1]] + list(prediccion), name="Predicción", line=dict(color='#ffaa00', width=3, dash='dash')))
+            fig_pred.add_trace(go.Scatter(x=df_pred['FECHA'], y=df_pred['VALUE'], name="Histórico", line=dict(color='#00d4ff', width=2)))
             
             fig_pred.update_layout(template="plotly_dark", height=300, hovermode="x unified", margin=dict(t=30, b=30))
             st.plotly_chart(fig_pred, use_container_width=True)
-        else:
-            st.warning("Sin datos para este periodo.")
     except Exception as e:
         st.error(f"Error: {e}")
 
