@@ -43,17 +43,7 @@ components.html(
 if 'scada_refresh' not in st.session_state:
     st.session_state.scada_refresh = 0
 
-# 0. SECCION ---------------------------------------- SISTEMA DE AUTENTICACIÓN HUD DEFINITIVO --------------------------------------------------------------------
-if 'autenticado' not in st.session_state:
-    query_params = st.query_params
-    if query_params.get("access") == "granted":
-        st.session_state.autenticado = True
-        st.session_state.rol = query_params.get("role", "usuario")
-    else:
-        st.session_state.autenticado = False
 
-if 'fase_carga' not in st.session_state:
-    st.session_state.fase_carga = False
 
 @st.cache_resource
 def get_mysql_telemetria_engine():
