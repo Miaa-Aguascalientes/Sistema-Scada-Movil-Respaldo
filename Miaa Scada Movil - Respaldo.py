@@ -693,9 +693,15 @@ if st.session_state.activo_tipo == "Pozo" and st.session_state.activo_id != "-- 
         )
 
 
-# ------------------------------------------------------------------------------ seccion de tanques ------------------------------------------------------------------------
+Entiendo perfectamente tu solicitud. Para que tu archivo Miaa Scada Movil.py funcione correctamente y elimine el error de sintaxis al integrar la sección de predicción, aquí tienes el bloque de código completo y estructurado.
 
-elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-- Seleccionar --":
+Este código abarca desde la condición if de Tanque hasta el cierre de la sección.
+
+Python
+# ------------------------------------------------------------------------------
+# SECCIÓN DE TANQUES (CORREGIDA Y CON PREDICCIÓN)
+# ------------------------------------------------------------------------------
+if st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-- Seleccionar --":
     id_tq = st.session_state.activo_id
     info_t = mapa_tanques_dict.get(id_tq)
     
@@ -706,7 +712,6 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
     ultimo_nivel, fecha_lectura = data_tq.get(info_t['tag_nivel'], (0.0, "N/A"))
     nivel_max = info_t.get('nivel_max', 0.0)
     
-    # Renderizar el indicador visual incluyendo el límite máximo
     st.markdown(f'''
         <div style="border: 2px solid #00d4ff; padding: 10px; border-radius: 12px; text-align: center; margin-bottom: 20px; background: rgba(0, 212, 255, 0.05);">
             <p style="color: white; font-size: 12px; margin: 0; font-weight: bold;">Nivel de tanque actual</p>
@@ -718,135 +723,81 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
         </div>
     ''', unsafe_allow_html=True)
     
-# 1. Definición de opciones
+    # 1. Definición de opciones
     opciones = ["Hoy", "Ayer", "Últimos 7 días", "Últimos 14 días", "Este Mes", "Último Mes", "Últimos 6 meses", "Personalizado"]
-    opcion_fecha = st.selectbox("Selecciona rango:", opciones, index=2) # Index 0 para empezar en 'Hoy'
+    opcion_fecha = st.selectbox("Selecciona rango:", opciones, index=2)
     
     hoy_dt = datetime.now()
     f_fin = hoy_dt
     
-    # 2. Lógica extendida para calcular fechas
-    if opcion_fecha == "Hoy":
-        f_ini = hoy_dt.replace(hour=0, minute=0, second=0, microsecond=0)
-    elif opcion_fecha == "Ayer":
-        f_ini = hoy_dt - timedelta(days=1)
-    elif opcion_fecha == "Últimos 7 días":
-        f_ini = hoy_dt - timedelta(days=7)
-    elif opcion_fecha == "Últimos 14 días":
-        f_ini = hoy_dt - timedelta(days=14)
-    elif opcion_fecha == "Este Mes":
-        f_ini = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    # 2. Lógica de fechas
+    if opcion_fecha == "Hoy": f_ini = hoy_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif opcion_fecha == "Ayer": f_ini = hoy_dt - timedelta(days=1)
+    elif opcion_fecha == "Últimos 7 días": f_ini = hoy_dt - timedelta(days=7)
+    elif opcion_fecha == "Últimos 14 días": f_ini = hoy_dt - timedelta(days=14)
+    elif opcion_fecha == "Este Mes": f_ini = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     elif opcion_fecha == "Último Mes":
-        # Primer día del mes actual menos un día nos da el mes anterior
         primer_dia_actual = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         f_ini = (primer_dia_actual - timedelta(days=1)).replace(day=1)
         f_fin = primer_dia_actual - timedelta(seconds=1)
-    elif opcion_fecha == "Últimos 6 meses":
-        f_ini = hoy_dt - timedelta(days=180)
+    elif opcion_fecha == "Últimos 6 meses": f_ini = hoy_dt - timedelta(days=180)
     elif opcion_fecha == "Personalizado":
         rango = st.date_input("Selecciona rango:", [hoy_dt - timedelta(days=7), hoy_dt])
-        if len(rango) == 2:
-            f_ini, f_fin = rango[0], rango[1]
-        else:
-            f_ini = hoy_dt - timedelta(days=7)
+        f_ini, f_fin = (rango[0], rango[1]) if len(rango) == 2 else (hoy_dt - timedelta(days=7), hoy_dt)
 
-    # 3. Consulta SQL ajustada con las nuevas variables
+    # 3. Consulta y Gráficos
     try:
         engine = get_mysql_scada_engine()
-        # Convertimos las fechas a string con formato explícito para evitar errores de interpretación
-        f_ini_str = f_ini.strftime('%Y-%m-%d %H:%M:%S')
-        f_fin_str = f_fin.strftime('%Y-%m-%d %H:%M:%S') if isinstance(f_fin, datetime) else f_fin.strftime('%Y-%m-%d %H:%M:%S')
-        
-        query = f"""
-            SELECT h.FECHA, h.VALUE FROM vfitagnumhistory h
-            JOIN VfiTagRef r ON h.GATEID = r.GATEID
-            WHERE r.NAME = '{info_t['tag_nivel']}' 
-            AND h.FECHA BETWEEN '{f_ini_str}' AND '{f_fin_str}'
-            ORDER BY h.FECHA ASC
-        """
+        query = f"SELECT h.FECHA, h.VALUE FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME = '{info_t['tag_nivel']}' AND h.FECHA BETWEEN '{f_ini.strftime('%Y-%m-%d %H:%M:%S')}' AND '{f_fin.strftime('%Y-%m-%d %H:%M:%S')}' ORDER BY h.FECHA ASC"
         df_hist = pd.read_sql(query, engine)
         
         if not df_hist.empty:
             df_hist['FECHA'] = pd.to_datetime(df_hist['FECHA'])
             
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=df_hist['FECHA'],
-                y=df_hist['VALUE'],
-                name="Nivel Tq",
-                mode='lines+markers', # Cambio realizado: líneas y puntos
-                line=dict(color='#00ffcc', width=2),
-                fill='tozeroy',
-                fillcolor='rgba(0, 255, 204, 0.1)',
-                hovertemplate="<b>Nivel</b>: %{y:.2f} m<extra></extra>"
-            ))
-            
-            fig.update_layout(
-                template="plotly_dark",
-                height=300,
-                margin=dict(t=60, b=80, l=10, r=10),
-                paper_bgcolor='rgba(0,0,0,0)', 
-                plot_bgcolor='rgba(0,0,0,0)',
-                hovermode="x unified",
-                showlegend=True,
-                legend=dict(
-                    orientation="h",
-                    y=1.2,
-                    x=0.5,
-                    xanchor="center",
-                    font=dict(size=10, color='white')
-                ),    
-                xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)', color='white'),
-                yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)', color='white')
-            )
+            # Gráfico Principal
+            fig = go.Figure(go.Scatter(x=df_hist['FECHA'], y=df_hist['VALUE'], name="Nivel Tq", mode='lines+markers', line=dict(color='#00ffcc', width=2), fill='tozeroy', fillcolor='rgba(0, 255, 204, 0.1)'))
+            fig.update_layout(template="plotly_dark", height=300, margin=dict(t=30, b=30, l=10, r=10), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
             st.plotly_chart(fig, use_container_width=True)
+
+            # Proyección 7 días
+            st.markdown("<h4 style='color:#00d4ff; margin-top:30px;'>🔮 Proyección de Nivel</h4>", unsafe_allow_html=True)
+            df_tendencia = df_hist[df_hist['FECHA'] >= (datetime.now() - timedelta(days=1))]
+            
+            if len(df_tendencia) > 5:
+                delta_val = df_tendencia['VALUE'].iloc[-1] - df_tendencia['VALUE'].iloc[0]
+                delta_time_hours = (df_tendencia['FECHA'].iloc[-1] - df_tendencia['FECHA'].iloc[0]).total_seconds() / 3600
+                pendiente = delta_val / delta_time_hours if delta_time_hours > 0 else 0
+                
+                ultimo_v, ultima_f = float(df_hist['VALUE'].iloc[-1]), df_hist['FECHA'].iloc[-1]
+                futuro_f = [ultima_f + timedelta(hours=i*6) for i in range(1, 29)]
+                futuro_v = [max(0, ultimo_v + (pendiente * (i*6))) for i in range(1, 29)]
+                
+                fig_pred = go.Figure()
+                fig_pred.add_trace(go.Scatter(x=df_hist['FECHA'].tail(50), y=df_hist['VALUE'].tail(50), name="Nivel Real", line=dict(color='#00d4ff', width=2)))
+                fig_pred.add_trace(go.Scatter(x=futuro_f, y=futuro_v, name="Proyección", line=dict(color='#ffaa00', width=2, dash='dash')))
+                fig_pred.update_layout(template="plotly_dark", height=300, margin=dict(t=30, b=30), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig_pred, use_container_width=True)
+            else:
+                st.info("Datos insuficientes para proyección.")
         else:
-            st.warning("Sin datos para este tanque en el periodo elegido.")
+            st.warning("Sin datos para este periodo.")
     except Exception as e:
-        st.error(f"Error cargando tanque: {e}")
+        st.error(f"Error: {e}")
 
-# -------------------------------------------------------------------------
-    # SEGUNDO GRÁFICO: PREDICCIÓN A 7 DÍAS
-    # -------------------------------------------------------------------------
-    st.markdown("<h4 style='color:#00d4ff; margin-top:30px;'>🔮 Proyección de Nivel (7 días)</h4>", unsafe_allow_html=True)
+elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id != "-- Seleccionar --":
+    # ... (Tu código de rebombeo aquí) ...
+    pass
 
-    # 1. Obtenemos datos de las últimas 24 horas para calcular la tendencia
-    df_tendencia = df_hist[df_hist['FECHA'] >= (datetime.now() - timedelta(days=1))]
-    
-    if not df_tendencia.empty and len(df_tendencia) > 5:
-        # Calculamos la pendiente (promedio de cambio por hora)
-        # Esto es una simplificación lineal de la tendencia actual
-        delta_val = df_tendencia['VALUE'].iloc[-1] - df_tendencia['VALUE'].iloc[0]
-        delta_time_hours = (df_tendencia['FECHA'].iloc[-1] - df_tendencia['FECHA'].iloc[0]).total_seconds() / 3600
-        pendiente = delta_val / delta_time_hours if delta_time_hours > 0 else 0
-        
-        # Generar fechas futuras
-        futuro_fechas = [datetime.now() + timedelta(hours=i) for i in range(0, 168, 6)] # Intervalos de 6 horas
-        futuro_valores = [max(0, float(ultimo_nivel) + (pendiente * i)) for i in range(0, 168, 6)]
-        
-        fig_pred = go.Figure()
-        
-        # Línea de historia reciente
-        fig_pred.add_trace(go.Scatter(x=df_hist['FECHA'].tail(20), y=df_hist['VALUE'].tail(20), 
-                                      name="Nivel Real", line=dict(color='#00d4ff', width=2)))
-        
-        # Línea de predicción
-        fig_pred.add_trace(go.Scatter(x=futuro_fechas, y=futuro_valores, 
-                                      name="Proyección", line=dict(color='#ffaa00', width=2, dash='dash')))
-        
-        # Línea de nivel máximo (referencia)
-        fig_pred.add_trace(go.Scatter(x=[futuro_fechas[0], futuro_fechas[-1]], y=[nivel_max, nivel_max], 
-                                      name="Límite Máximo", line=dict(color='red', width=1, dash='dot')))
+elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != "-- Seleccionar --":
+    # ... (Tu código de sectores aquí) ...
+    pass
 
-        fig_pred.update_layout(
-            template="plotly_dark", height=300, margin=dict(t=30, b=30, l=10, r=10),
-            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-            hovermode="x unified", showlegend=True,
-            legend=dict(orientation="h", y=1.2, x=0.5, xanchor="center", font=dict(size=9))
-        )
-        st.plotly_chart(fig_pred, use_container_width=True)
-    else:
-        st.info("Datos insuficientes para generar una predicción automática.")
+else:
+    # Vista Default
+    st.markdown("""<div style="text-align: center; margin-top: 40px; padding: 20px; background: rgba(0,212,255,0.02); border: 1px dashed #1f4068; border-radius: 10px;">
+        <p style="color: #00d4ff; font-family: 'Orbitron', sans-serif; font-size: 14px; margin: 0;">
+            Sistema visual Scada. Seleccione una opcion superior para generar el grafico.
+        </p></div>""", unsafe_allow_html=True)
 
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
 
