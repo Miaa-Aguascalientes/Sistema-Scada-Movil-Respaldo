@@ -739,8 +739,7 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
         df['FECHA'] = pd.to_datetime(df['FECHA'])
         
         if not df.empty:
-            # 1. GRÁFICO HISTÓRICO
-            if not df.empty:
+
         # 1. GRÁFICO HISTÓRICO
         st.markdown("<h4 style='color:#00d4ff;'>📊 Nivel Histórico</h4>", unsafe_allow_html=True)
         fig1 = go.Figure(go.Scatter(x=df['FECHA'], y=df['VALUE'], line=dict(color='#00ffcc')))
