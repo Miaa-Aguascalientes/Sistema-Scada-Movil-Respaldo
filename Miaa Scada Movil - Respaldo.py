@@ -786,7 +786,7 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
     # ... (Tu código de sectores aquí) ...
     pass
 
-else:
+elif:
     # Vista Default
     st.markdown("""<div style="text-align: center; margin-top: 40px; padding: 20px; background: rgba(0,212,255,0.02); border: 1px dashed #1f4068; border-radius: 10px;">
         <p style="color: #00d4ff; font-family: 'Orbitron', sans-serif; font-size: 14px; margin: 0;">
