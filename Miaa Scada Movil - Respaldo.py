@@ -766,8 +766,7 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
         )
         st.plotly_chart(fig2, use_container_width=True)
             
-        else:
-            st.warning("No hay suficientes datos históricos para calcular tendencia.")
+
     except Exception as e:
         st.error(f"Error técnico: {e}")
 
