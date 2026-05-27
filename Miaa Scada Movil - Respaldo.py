@@ -692,12 +692,6 @@ if st.session_state.activo_tipo == "Pozo" and st.session_state.activo_id != "-- 
             unsafe_allow_html=True
         )
 
-
-Entiendo perfectamente tu solicitud. Para que tu archivo Miaa Scada Movil.py funcione correctamente y elimine el error de sintaxis al integrar la sección de predicción, aquí tienes el bloque de código completo y estructurado.
-
-Este código abarca desde la condición if de Tanque hasta el cierre de la sección.
-
-Python
 # ------------------------------------------------------------------------------
 # SECCIÓN DE TANQUES (CORREGIDA Y CON PREDICCIÓN)
 # ------------------------------------------------------------------------------
