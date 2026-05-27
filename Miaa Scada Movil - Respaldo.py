@@ -719,7 +719,14 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
     # --- CONSULTA ---
     try:
         engine = get_mysql_scada_engine()
-        query = f"SELECT h.FECHA, h.VALUE FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME = '{info_t['tag_nivel']}' ORDER BY h.FECHA DESC LIMIT 300"
+        query = f"""
+            SELECT h.FECHA, h.VALUE 
+            FROM vfitagnumhistory h 
+            JOIN VfiTagRef r ON h.GATEID = r.GATEID 
+            WHERE r.NAME = '{info_t['tag_nivel']}' 
+            AND h.FECHA >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+            ORDER BY h.FECHA ASC
+        """
         df = pd.read_sql(query, engine).sort_values('FECHA')
         
         if not df.empty:
