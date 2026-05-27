@@ -727,7 +727,14 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
 
     try:
         engine = get_mysql_scada_engine()
-        query = f"SELECT FECHA, VALUE FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME = '{info_t['tag_nivel']}' AND h.FECHA >= '{f_ini.strftime('%Y-%m-%d')}' ORDER BY FECHA ASC"
+        query = f"""
+            SELECT h.FECHA, h.VALUE 
+            FROM vfitagnumhistory h
+            JOIN VfiTagRef r ON h.GATEID = r.GATEID 
+            WHERE r.NAME = '{info_t['tag_nivel']}' 
+            AND h.FECHA >= '{f_ini.strftime('%Y-%m-%d')}' 
+            ORDER BY h.FECHA ASC
+        """
         df = pd.read_sql(query, engine)
         df['FECHA'] = pd.to_datetime(df['FECHA'])
         
