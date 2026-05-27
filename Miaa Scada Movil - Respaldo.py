@@ -8,8 +8,6 @@ from datetime import datetime, timedelta
 import plotly.graph_objects as go
 import time
 import pytz
-import numpy as np
-from sklearn.linear_model import LinearRegression
 
 # Configuración de página optimizada para móviles
 st.set_page_config(
@@ -460,7 +458,7 @@ st.markdown('''
 ''', unsafe_allow_html=True)
 
 # PANEL DE CONTROL HUD SUPERIOR - SELECTORES MÓVILES
-st.markdown('<h2 style="color:#00d4ff; font-size:18px; margin-bottom:12px;">🖥️ Panel Scada Respaldo</h2>', unsafe_allow_html=True)
+st.markdown('<h2 style="color:#00d4ff; font-size:18px; margin-bottom:12px;">🖥️ Panel Scada</h2>', unsafe_allow_html=True)
 
 c1, c2 = st.columns(2)
 with c1:
@@ -695,11 +693,9 @@ if st.session_state.activo_tipo == "Pozo" and st.session_state.activo_id != "-- 
         )
 
 
-# ------------------------------------------------------------------------------
-# seccion de tanques
-# ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------ seccion de tanques ------------------------------------------------------------------------
 
-if st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-- Seleccionar --":
+elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-- Seleccionar --":
     id_tq = st.session_state.activo_id
     info_t = mapa_tanques_dict.get(id_tq)
     
@@ -710,6 +706,7 @@ if st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-
     ultimo_nivel, fecha_lectura = data_tq.get(info_t['tag_nivel'], (0.0, "N/A"))
     nivel_max = info_t.get('nivel_max', 0.0)
     
+    # Renderizar el indicador visual incluyendo el límite máximo
     st.markdown(f'''
         <div style="border: 2px solid #00d4ff; padding: 10px; border-radius: 12px; text-align: center; margin-bottom: 20px; background: rgba(0, 212, 255, 0.05);">
             <p style="color: white; font-size: 12px; margin: 0; font-weight: bold;">Nivel de tanque actual</p>
@@ -721,30 +718,42 @@ if st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-
         </div>
     ''', unsafe_allow_html=True)
     
-    # 1. Definición de opciones
+# 1. Definición de opciones
     opciones = ["Hoy", "Ayer", "Últimos 7 días", "Últimos 14 días", "Este Mes", "Último Mes", "Últimos 6 meses", "Personalizado"]
-    opcion_fecha = st.selectbox("Selecciona rango:", opciones, index=2)
+    opcion_fecha = st.selectbox("Selecciona rango:", opciones, index=2) # Index 0 para empezar en 'Hoy'
     
     hoy_dt = datetime.now()
     f_fin = hoy_dt
     
-    if opcion_fecha == "Hoy": f_ini = hoy_dt.replace(hour=0, minute=0, second=0, microsecond=0)
-    elif opcion_fecha == "Ayer": f_ini = hoy_dt - timedelta(days=1)
-    elif opcion_fecha == "Últimos 7 días": f_ini = hoy_dt - timedelta(days=7)
-    elif opcion_fecha == "Últimos 14 días": f_ini = hoy_dt - timedelta(days=14)
-    elif opcion_fecha == "Este Mes": f_ini = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    # 2. Lógica extendida para calcular fechas
+    if opcion_fecha == "Hoy":
+        f_ini = hoy_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif opcion_fecha == "Ayer":
+        f_ini = hoy_dt - timedelta(days=1)
+    elif opcion_fecha == "Últimos 7 días":
+        f_ini = hoy_dt - timedelta(days=7)
+    elif opcion_fecha == "Últimos 14 días":
+        f_ini = hoy_dt - timedelta(days=14)
+    elif opcion_fecha == "Este Mes":
+        f_ini = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     elif opcion_fecha == "Último Mes":
+        # Primer día del mes actual menos un día nos da el mes anterior
         primer_dia_actual = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         f_ini = (primer_dia_actual - timedelta(days=1)).replace(day=1)
         f_fin = primer_dia_actual - timedelta(seconds=1)
-    elif opcion_fecha == "Últimos 6 meses": f_ini = hoy_dt - timedelta(days=180)
+    elif opcion_fecha == "Últimos 6 meses":
+        f_ini = hoy_dt - timedelta(days=180)
     elif opcion_fecha == "Personalizado":
         rango = st.date_input("Selecciona rango:", [hoy_dt - timedelta(days=7), hoy_dt])
-        f_ini, f_fin = (rango[0], rango[1]) if len(rango) == 2 else (hoy_dt - timedelta(days=7), hoy_dt)
+        if len(rango) == 2:
+            f_ini, f_fin = rango[0], rango[1]
+        else:
+            f_ini = hoy_dt - timedelta(days=7)
 
-    # 3. Consulta y Predicción
+    # 3. Consulta SQL ajustada con las nuevas variables
     try:
         engine = get_mysql_scada_engine()
+        # Convertimos las fechas a string con formato explícito para evitar errores de interpretación
         f_ini_str = f_ini.strftime('%Y-%m-%d %H:%M:%S')
         f_fin_str = f_fin.strftime('%Y-%m-%d %H:%M:%S') if isinstance(f_fin, datetime) else f_fin.strftime('%Y-%m-%d %H:%M:%S')
         
@@ -760,31 +769,43 @@ if st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-
         if not df_hist.empty:
             df_hist['FECHA'] = pd.to_datetime(df_hist['FECHA'])
             
-            # --- Lógica de Predicción ---
-            df_hist['ts'] = df_hist['FECHA'].astype(np.int64) // 10**9
-            model = LinearRegression()
-            model.fit(df_hist[['ts']], df_hist['VALUE'])
-            
-            future_ts = np.array([df_hist['ts'].iloc[-1] + (i * 3600) for i in range(1, 7)]).reshape(-1, 1)
-            prediccion = model.predict(future_ts)
-            future_dates = [pd.to_datetime(ts, unit='s') for ts in future_ts.flatten()]
-            
             fig = go.Figure()
-            # Datos Reales
-            fig.add_trace(go.Scatter(x=df_hist['FECHA'], y=df_hist['VALUE'], name="Nivel Real", mode='lines+markers', line=dict(color='#00ffcc', width=2)))
-            # Predicción
-            fig.add_trace(go.Scatter(x=future_dates, y=prediccion, name="Predicción (6h)", mode='lines', line=dict(color='#ffcc00', width=2, dash='dot')))
+            fig.add_trace(go.Scatter(
+                x=df_hist['FECHA'],
+                y=df_hist['VALUE'],
+                name="Nivel Tq",
+                mode='lines+markers', # Cambio realizado: líneas y puntos
+                line=dict(color='#00ffcc', width=2),
+                fill='tozeroy',
+                fillcolor='rgba(0, 255, 204, 0.1)',
+                hovertemplate="<b>Nivel</b>: %{y:.2f} m<extra></extra>"
+            ))
             
-            fig.update_layout(template="plotly_dark", height=350, margin=dict(t=30, b=30, l=10, r=10), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', hovermode="x unified")
+            fig.update_layout(
+                template="plotly_dark",
+                height=300,
+                margin=dict(t=60, b=80, l=10, r=10),
+                paper_bgcolor='rgba(0,0,0,0)', 
+                plot_bgcolor='rgba(0,0,0,0)',
+                hovermode="x unified",
+                showlegend=True,
+                legend=dict(
+                    orientation="h",
+                    y=1.2,
+                    x=0.5,
+                    xanchor="center",
+                    font=dict(size=10, color='white')
+                ),    
+                xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)', color='white'),
+                yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)', color='white')
+            )
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.warning("Sin datos para este periodo.")
+            st.warning("Sin datos para este tanque en el periodo elegido.")
     except Exception as e:
         st.error(f"Error cargando tanque: {e}")
 
-# ------------------------------------------------------------------------------
-# seccion de rebombeos
-# ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
 
 elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id != "-- Seleccionar --":
     id_rb = st.session_state.activo_id
@@ -792,6 +813,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
     
     st.markdown(f"<h3 style='color:#00d4ff;'>🧊  Estación de Rebombeo: {info_rb['nombre']}</h3>", unsafe_allow_html=True)
     
+    # Consulta de estados inmediatos
     tags_rb = [info_rb.get('presion'), info_rb.get('nivel_tanque')]
     data_scada_rb = cargar_datos_scada([t for t in tags_rb if t])
     
@@ -802,6 +824,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
     rc1.metric("Presión Actual", f"{float(p_rb):.2f} Kg/cm²")
     rc2.metric("Nivel de Succión", f"{float(n_rb):.2f} m")
     
+    # Gráfico histórico rápido de presión de Rebombeo
     st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Histórico de Presión (Últimos 7 días)</h4>", unsafe_allow_html=True)
     df_p_rb = obtener_historia_7_dias(info_rb.get('presion'))
     if not df_p_rb.empty:
@@ -809,9 +832,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
         fig_rb.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig_rb, use_container_width=True)
 
-# ------------------------------------------------------------------------------
-# seccion de sectores
-# ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------ seccion de sectores ------------------------------------------------------------------------
 
 elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != "-- Seleccionar --":
     sec_id = st.session_state.activo_id
@@ -820,6 +841,7 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
     if datos_s:
         st.markdown(f"<h3 style='color:#00d4ff;'>🏘️ Sector Hidráulico: {sec_id}</h3>", unsafe_allow_html=True)
         
+        # Grid compacto de Tarjetas de Información Técnica del Sector (KPIs)
         sc1, sc2, sc3 = st.columns(3)
         with sc1:
             st.markdown(f'<div class="card-indicador"><p class="label-indicador">Superficie</p><p class="value-indicador">{datos_s.get("Superficie",0):,.1f} ha</p></div>', unsafe_allow_html=True)
@@ -831,8 +853,10 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
             st.markdown(f'<div class="card-indicador"><p class="label-indicador">Consumo Mensual</p><p class="value-indicador">{datos_s.get("Cons_m3",0):,.1f} m³</p></div>', unsafe_allow_html=True)
             st.markdown(f'<div class="card-indicador"><p class="label-indicador">Eficiencia / Balance</p><p class="value-indicador">{datos_s.get("Balance_Estimado",0):,.1f}%</p></div>', unsafe_allow_html=True)
             
+        # Gráficos Históricos del Sector
         st.markdown("<h4 style='color:#00d4ff;'>📈 Comportamiento de Presiones y Caudales</h4>", unsafe_allow_html=True)
         
+        # Cargar Puntos de control asignados al sector
         dict_reg_all = cargar_puntos_de_control_desde_db()
         dict_reg = {k: v for k, v in dict_reg_all.items() if str(v.get('sector')).strip() == str(sec_id).strip()}
         
@@ -851,6 +875,7 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                 if not df_sec.empty:
                     df_sec['FECHA'] = pd.to_datetime(df_sec['FECHA'])
                     fig_sec = go.Figure()
+                    
                     for r_id, r_info in dict_reg.items():
                         df_p1 = df_sec[df_sec['TAG'] == r_info.get('tag_p1')]
                         if not df_p1.empty:
@@ -859,10 +884,11 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                     fig_sec.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', hovermode="x unified")
                     st.plotly_chart(fig_sec, use_container_width=True)
                 else:
-                    st.info("Sin registros telemétricos en los últimos 3 días.")
+                    st.info("Sin registros telemétricos en los últimos 3 días para este sector.")
         else:
             st.info("No hay registradores vinculados a este sector.")
 else:
+    # Vista Default (HUD de Bienvenida) cuando no hay ningún elemento activo seleccionado
     st.markdown("""
     <div style="text-align: center; margin-top: 40px; padding: 20px; background: rgba(0,212,255,0.02); border: 1px dashed #1f4068; border-radius: 10px;">
         <p style="color: #00d4ff; font-family: 'Orbitron', sans-serif; font-size: 14px; margin: 0;">
