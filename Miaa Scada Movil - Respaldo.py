@@ -715,7 +715,6 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
         </div>
     ''', unsafe_allow_html=True)
     
-    # Rango de fechas
     opciones = ["Últimos 7 días", "Últimos 14 días", "Este Mes"]
     opcion_fecha = st.selectbox("Selecciona rango:", opciones)
     
@@ -726,6 +725,7 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
 
     try:
         engine = get_mysql_scada_engine()
+        # Consulta corregida con alias h.FECHA
         query = f"""
             SELECT h.FECHA, h.VALUE 
             FROM vfitagnumhistory h
@@ -734,62 +734,44 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
             AND h.FECHA >= '{f_ini.strftime('%Y-%m-%d %H:%M:%S')}' 
             ORDER BY h.FECHA ASC
         """
-        df = pd.read_sql(query, engine)
+        df_hist = pd.read_sql(query, engine)
         
-        if not df.empty:
-            df['FECHA'] = pd.to_datetime(df['FECHA'])
+        if not df_hist.empty:
+            df_hist['FECHA'] = pd.to_datetime(df_hist['FECHA'])
             
-            # 1. GRÁFICO DE VALORES REALES
+            # 1. GRÁFICO HISTÓRICO REAL
             st.markdown("<h4 style='color:#00d4ff;'>📊 Nivel Histórico Real</h4>", unsafe_allow_html=True)
-            fig1 = go.Figure(go.Scatter(x=df['FECHA'], y=df['VALUE'], name="Real", line=dict(color='#00ffcc', width=2)))
+            fig1 = go.Figure(go.Scatter(x=df_hist['FECHA'], y=df_hist['VALUE'], name="Real", line=dict(color='#00ffcc', width=2)))
             fig1.update_layout(template="plotly_dark", height=300, margin=dict(t=20, b=20, l=10, r=10), hovermode="x unified")
             st.plotly_chart(fig1, use_container_width=True)
             
-            # 2. GRÁFICO DE PREDICCIÓN (PROYECCIÓN DE PATRÓN)
-            st.markdown("<h4 style='color:#ffcc00;'>🔮 Proyección de Tendencia (Próximos 7 días)</h4>", unsafe_allow_html=True)
+            # 2. GRÁFICO DE PREDICCIÓN (MATEMÁTICA)
+            st.markdown("<h4 style='color:#ffcc00;'>🔮 Proyección (Tendencia 7 días)</h4>", unsafe_allow_html=True)
             
+            # Cálculo de tendencia
             x = (df_hist['FECHA'] - df_hist['FECHA'].min()).dt.total_seconds() / 86400
             y = df_hist['VALUE'].values
             
-            # Ajustamos una curva polinómica de grado 3 (bueno para ciclos de llenado)
+            # Ajuste polinómico grado 3 (captura subidas y bajadas)
             coefs = np.polyfit(x, y, 3)
             poly_func = np.poly1d(coefs)
             
-            # Creamos fechas para los próximos 7 días
+            # Fechas futuras
             last_date = df_hist['FECHA'].max()
             future_x = np.linspace(x.max(), x.max() + 7, 100)
             future_dates = [last_date + timedelta(days=float(i - x.max())) for i in future_x]
-            future_y = poly_func(future_x)
+            future_y = np.maximum(poly_func(future_x), 0) # No permite valores negativos
             
-            # Aseguramos que no haya valores negativos (un tanque no baja de 0m)
-            future_y = np.maximum(future_y, 0)
-            
-            # --- GRÁFICO ---
-            fig = go.Figure()
-            
-            # Datos reales
-            fig.add_trace(go.Scatter(
-                x=df_hist['FECHA'], y=df_hist['VALUE'],
-                name="Nivel Real", line=dict(color='#00ffcc', width=2)
-            ))
-            
-            # Predicción
-            fig.add_trace(go.Scatter(
-                x=future_dates, y=future_y,
-                name="Predicción (Tendencia)", 
+            fig2 = go.Figure(go.Scatter(
+                x=future_dates, y=future_y, 
+                name="Predicción",
                 line=dict(color='#ffcc00', width=2, dash='dot')
             ))
             
-            fig.update_layout(
-                template="plotly_dark",
-                height=300,
-                margin=dict(t=60, b=80, l=10, r=10),
-                hovermode="x unified"
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            fig2.update_layout(template="plotly_dark", height=300, margin=dict(t=20, b=20, l=10, r=10), hovermode="x unified")
+            st.plotly_chart(fig2, use_container_width=True)
             
-        else:
-            st.warning("No hay suficientes datos históricos para este periodo.")
+
             
     except Exception as e:
         st.error(f"Error técnico: {e}")
