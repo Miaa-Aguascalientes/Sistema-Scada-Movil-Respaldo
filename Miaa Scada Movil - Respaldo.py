@@ -742,37 +742,53 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
                 fig_real.update_layout(template="plotly_dark", height=300, hovermode="x unified", margin=dict(t=30, b=30))
                 st.plotly_chart(fig_real, use_container_width=True)
 
-                # 2. GRÁFICO PREDICCIÓN (LÓGICA CÍCLICA CON LÍMITE 60M)
-                st.markdown("<h4 style='color:#ffaa00;'>🔮 Predicción de Nivel (Tendencia Cíclica)</h4>", unsafe_allow_html=True)
+# 2. GRÁFICO PREDICCIÓN (MODELO DE PATRÓN CÍCLICO)
+            st.markdown("<h4 style='color:#ffaa00;'>🔮 Predicción (Patrón Diario)</h4>", unsafe_allow_html=True)
+            
+            # Usamos los últimos 2 días (48 horas) para capturar el patrón de subida/bajada
+            df_pred = df_hist.tail(48).copy()
+            
+            # Calculamos la diferencia del nivel hora a hora
+            # Esto ayuda a predecir si el tanque está en fase de llenado o vaciado
+            patron_diario = df_pred.groupby(df_pred['FECHA'].dt.hour)['VALUE'].mean()
+            
+            # Generamos la predicción futura basada en el patrón horario detectado
+            horas_futuras = []
+            valores_futuros = []
+            ultima_fecha = df_hist['FECHA'].iloc[-1]
+            
+            for i in range(1, 49): # Proyectamos 48 horas hacia adelante
+                fecha_f = ultima_fecha + timedelta(hours=i)
+                horas_futuras.append(fecha_f)
                 
-                df_pred = df_hist.tail(72).copy() # Histórico reciente para patrón
-                df_pred['H'] = (df_pred['FECHA'] - df_pred['FECHA'].iloc[0]).dt.total_seconds() / 3600
-                
-                # Ajuste polinomial de 2do grado para la curva de tendencia
-                z = np.polyfit(df_pred['H'], df_pred['VALUE'], 2)
-                p = np.poly1d(z)
-                
-                ultima_fecha = df_pred['FECHA'].iloc[-1]
-                ultima_h = df_pred['H'].iloc[-1]
-                futuro_h = np.linspace(ultima_h, ultima_h + 168, 40)
-                
-                # Predicción con CLAMP a 60 metros máximo
-                prediccion = np.clip(p(futuro_h), 0, 60)
-                
-                fechas_f = [ultima_fecha + timedelta(hours=float(h - ultima_h)) for h in futuro_h]
-                
-                fig_pred = go.Figure()
-                fig_pred.add_trace(go.Scatter(x=[ultima_fecha] + fechas_f, y=[df_pred['VALUE'].iloc[-1]] + list(prediccion), name="Predicción", line=dict(color='#ffaa00', width=3, dash='dash')))
-                fig_pred.add_trace(go.Scatter(x=df_pred['FECHA'], y=df_pred['VALUE'], name="Histórico", line=dict(color='#00d4ff', width=2)))
-                
-                fig_pred.update_layout(template="plotly_dark", height=300, hovermode="x unified", margin=dict(t=30, b=30))
-                st.plotly_chart(fig_pred, use_container_width=True)
-            else:
-                st.warning("Sin datos para este periodo.")
-        except Exception as e:
-            st.error(f"Error procesando datos: {e}")
-    else:
-        st.error("No se encontró información del tanque.")
+                # Obtenemos el valor promedio histórico para esa hora del día
+                val_promedio = patron_diario.get(fecha_f.hour, df_pred['VALUE'].iloc[-1])
+                valores_futuros.append(val_promedio)
+            
+            # Límite físico de 60 metros (Clamp)
+            valores_futuros = np.clip(valores_futuros, 0, 60)
+            
+            # Gráfico con tu indexación intacta
+            fig_pred = go.Figure()
+            
+            # Línea de predicción (la que sube y baja según tu patrón)
+            fig_pred.add_trace(go.Scatter(
+                x=[ultima_fecha] + horas_futuras, 
+                y=[df_hist['VALUE'].iloc[-1]] + list(valores_futuros), 
+                name="Predicción Cíclica", 
+                line=dict(color='#ffaa00', width=3, dash='dash')
+            ))
+            
+            # Línea histórica (para que veas cómo se conecta)
+            fig_pred.add_trace(go.Scatter(
+                x=df_hist['FECHA'].tail(24), 
+                y=df_hist['VALUE'].tail(24), 
+                name="Histórico Reciente", 
+                line=dict(color='#00d4ff', width=2)
+            ))
+            
+            fig_pred.update_layout(template="plotly_dark", height=300, hovermode="x unified", margin=dict(t=30, b=30))
+            st.plotly_chart(fig_pred, use_container_width=True)
 
 
 
