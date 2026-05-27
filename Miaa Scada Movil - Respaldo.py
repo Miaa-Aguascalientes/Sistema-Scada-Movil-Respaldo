@@ -697,83 +697,79 @@ if st.session_state.activo_tipo == "Pozo" and st.session_state.activo_id != "-- 
 # ------------------------------------------------------------------------------
 # SECCION DE TANQUES (CORREGIDA: AMBOS GRÁFICOS)
 elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-- Seleccionar --":
+    # IMPORTACIÓN NECESARIA (Asegúrate de tener scipy instalado: pip install scipy)
+    from scipy.fft import fft, ifft
+    
     id_tq = st.session_state.activo_id
     info_t = mapa_tanques_dict.get(id_tq)
     
     st.markdown(f"<h3 style='color:#00d4ff;'>🛢️ Análisis de Nivel: {info_t['nombre']}</h3>", unsafe_allow_html=True)
 
-    # --- INDICADOR ORIGINAL (INTACTO) ---
+    # --- INDICADOR ORIGINAL ---
     data_tq = cargar_datos_scada([info_t['tag_nivel']])
     ultimo_nivel, fecha_lectura = data_tq.get(info_t['tag_nivel'], (0.0, "N/A"))
-    nivel_max = info_t.get('nivel_max', 0.0)
     
     st.markdown(f'''
         <div style="border: 2px solid #00d4ff; padding: 10px; border-radius: 12px; text-align: center; margin-bottom: 20px; background: rgba(0, 212, 255, 0.05);">
             <p style="color: white; font-size: 12px; margin: 0; font-weight: bold;">Nivel de tanque actual</p>
             <p style="color: white; font-size: 32px; font-weight: bold; margin: 0;">{float(ultimo_nivel):,.2f} <span style="font-size: 18px; color: #00d4ff;">Mts</span></p>
-            <p style="color: #cccccc; font-size: 11px; margin-top: 5px;">
-                Nivel Máximo: <span style="color: #00d4ff; font-weight: bold;">{float(nivel_max):,.2f} Mts</span>
-            </p>
-            <p style="color: white; font-size: 10px; margin-top: 5px;">Última lectura: {fecha_lectura}</p>
         </div>
     ''', unsafe_allow_html=True)
-    
-    # --- SELECTOR DE FECHAS ---
-    opciones = ["Últimos 7 días", "Últimos 14 días", "Este Mes"]
-    opcion_fecha = st.selectbox("Selecciona rango:", opciones)
-    
-    hoy_dt = datetime.now()
-    if opcion_fecha == "Últimos 7 días": f_ini = hoy_dt - timedelta(days=7)
-    elif opcion_fecha == "Últimos 14 días": f_ini = hoy_dt - timedelta(days=14)
-    else: f_ini = hoy_dt.replace(day=1, hour=0, minute=0)
-    f_fin = hoy_dt
 
+    # --- CONSULTA ---
     try:
         engine = get_mysql_scada_engine()
-        # Consulta limpia y explícita
-        query = f"""SELECT h.FECHA, h.VALUE 
-                    FROM vfitagnumhistory h 
-                    JOIN VfiTagRef r ON h.GATEID = r.GATEID 
-                    WHERE r.NAME = '{info_t['tag_nivel']}' 
-                    AND h.FECHA BETWEEN '{f_ini.strftime('%Y-%m-%d %H:%M:%S')}' AND '{f_fin.strftime('%Y-%m-%d %H:%M:%S')}' 
-                    ORDER BY h.FECHA ASC"""
-        df = pd.read_sql(query, engine)
+        query = f"SELECT h.FECHA, h.VALUE FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME = '{info_t['tag_nivel']}' ORDER BY h.FECHA DESC LIMIT 300"
+        df = pd.read_sql(query, engine).sort_values('FECHA')
         
         if not df.empty:
             df['FECHA'] = pd.to_datetime(df['FECHA'])
             
             # --- GRÁFICO 1: REAL ---
             st.markdown("#### 📊 Nivel Histórico Real")
-            fig1 = go.Figure(go.Scatter(x=df['FECHA'], y=df['VALUE'], name="Real", line=dict(color='#00ffcc', width=2)))
-            fig1.update_layout(template="plotly_dark", height=300, margin=dict(t=20, b=20), hovermode="x unified")
+            fig1 = go.Figure(go.Scatter(x=df['FECHA'], y=df['VALUE'], name="Real", line=dict(color='#00ffcc')))
+            fig1.update_layout(template="plotly_dark", height=300, margin=dict(t=20, b=20))
             st.plotly_chart(fig1, use_container_width=True)
             
-            # --- GRÁFICO 2: PROYECCIÓN (REPETICIÓN DE PATRÓN) ---
-            st.markdown("#### 🔮 Proyección (Ciclos Previstos)")
+            # --- MODELO MATEMÁTICO (FOURIER) ---
+            st.markdown("#### 🔮 Predicción Matemática (Modelo Armónico)")
             
-            # Cogemos el patrón de los últimos 7 días reales y lo desplazamos 7 días al futuro
-            df_patron = df.copy()
-            df_patron['FECHA_PROYECTADA'] = df_patron['FECHA'] + timedelta(days=7)
+            n = len(df)
+            y = df['VALUE'].values
+            
+            # Transformada de Fourier para identificar ciclos
+            fhat = fft(y)
+            # Filtramos frecuencias: solo dejamos las 5 más importantes (elimina ruido)
+            n_harm = 5 
+            fhat_filtered = fhat.copy()
+            fhat_filtered[n_harm:-n_harm] = 0
+            
+            # Reconstrucción de la señal futura
+            forecast_y = np.real(ifft(fhat_filtered))
+            
+            # Extrapolamos 168 horas (7 días) manteniendo la tendencia armónica
+            t = np.arange(n + 168)
+            # Ajuste de tendencia lineal sobre la señal armónica
+            z = np.polyfit(np.arange(n), y, 1)
+            p = np.poly1d(z)
+            
+            future_vals = np.concatenate([forecast_y, forecast_y[-168:]]) + (p(t) - np.mean(y))
+            future_vals = np.maximum(future_vals, 0) # Límite físico: no puede ser menor a 0
+            
+            future_dates = [df['FECHA'].iloc[-1] + timedelta(hours=i) for i in range(1, len(future_vals)+1)]
             
             fig2 = go.Figure(go.Scatter(
-                x=df_patron['FECHA_PROYECTADA'], 
-                y=df_patron['VALUE'], 
-                name="Proyección", 
-                line=dict(color='#ffcc00', width=2, dash='dot')
+                x=future_dates[-(168*2):], # Mostramos la transición y los 7 días
+                y=future_vals[-(168*2):],
+                name="Modelo Armónico", 
+                line=dict(color='#ffcc00', dash='dot')
             ))
             
-            fig2.update_layout(
-                template="plotly_dark", 
-                height=300, 
-                margin=dict(t=20, b=20), 
-                hovermode="x unified",
-                xaxis=dict(title="Fecha Proyectada"),
-                yaxis=dict(title="Nivel (m)", range=[0, float(nivel_max) * 1.1])
-            )
+            fig2.update_layout(template="plotly_dark", height=300, margin=dict(t=20, b=20))
             st.plotly_chart(fig2, use_container_width=True)
             
         else:
-            st.warning("No hay datos para este rango.")
+            st.warning("No hay datos suficientes.")
     except Exception as e:
         st.error(f"Error técnico: {e}")
 
