@@ -787,7 +787,6 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
                 line=dict(color='#00d4ff', width=2)
             ))
             
-            else:
-                st.warning("Sin datos para este periodo.")
+
         except Exception as e:
             st.error(f"Error procesando datos: {e}")
