@@ -700,9 +700,9 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
     id_tq = st.session_state.activo_id
     info_t = mapa_tanques_dict.get(id_tq)
     
-    st.markdown(f"<h3 style='color:#00d4ff;'>🛢️  Análisis de Nivel: {info_t['nombre']}</h3>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='color:#00d4ff;'>🛢️ Análisis de Nivel: {info_t['nombre']}</h3>", unsafe_allow_html=True)
 
-    # --- DATOS Y TU INDICADOR ORIGINAL (INTACTO) ---
+    # 1. Indicador original (INTACTO)
     data_tq = cargar_datos_scada([info_t['tag_nivel']])
     ultimo_nivel, fecha_lectura = data_tq.get(info_t['tag_nivel'], (0.0, "N/A"))
     nivel_max = info_t.get('nivel_max', 0.0)
@@ -717,46 +717,49 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
             <p style="color: white; font-size: 10px; margin-top: 5px;">Última lectura: {fecha_lectura}</p>
         </div>
     ''', unsafe_allow_html=True)
-    
-    # ... (Tu selector de fechas y consulta SQL tal cual los tienes) ...
-    opciones = ["Hoy", "Ayer", "Últimos 7 días", "Últimos 14 días", "Este Mes", "Último Mes", "Últimos 6 meses", "Personalizado"]
-    opcion_fecha = st.selectbox("Selecciona rango:", opciones, index=2)
-    
-    # (Mantén aquí tu lógica de fechas original)
-    hoy_dt = datetime.now()
-    # ... [Insertar aquí el bloque de fechas que ya funciona en tu código] ...
 
+    # 2. Selector de fechas (Variables definidas antes de su uso)
+    opciones = ["Últimos 7 días", "Últimos 14 días", "Este Mes"]
+    opcion_fecha = st.selectbox("Selecciona rango:", opciones)
+    
+    hoy_dt = datetime.now()
+    if opcion_fecha == "Últimos 7 días": f_ini = hoy_dt - timedelta(days=7)
+    elif opcion_fecha == "Últimos 14 días": f_ini = hoy_dt - timedelta(days=14)
+    else: f_ini = hoy_dt.replace(day=1, hour=0, minute=0)
+    f_fin = hoy_dt
+
+    # 3. Consulta SQL y Gráficos
     try:
         engine = get_mysql_scada_engine()
-        # Consulta corregida para evitar ambigüedad de FECHA
-        query = f"SELECT h.FECHA, h.VALUE FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME = '{info_t['tag_nivel']}' AND h.FECHA BETWEEN '{f_ini.strftime('%Y-%m-%d %H:%M:%S')}' AND '{f_fin.strftime('%Y-%m-%d %H:%M:%S')}' ORDER BY h.FECHA ASC"
-        df_hist = pd.read_sql(query, engine)
+        query = f"""SELECT h.FECHA, h.VALUE 
+                    FROM vfitagnumhistory h 
+                    JOIN VfiTagRef r ON h.GATEID = r.GATEID 
+                    WHERE r.NAME = '{info_t['tag_nivel']}' 
+                    AND h.FECHA >= '{f_ini.strftime('%Y-%m-%d %H:%M:%S')}' 
+                    ORDER BY h.FECHA ASC"""
+        df = pd.read_sql(query, engine)
         
-        if not df_hist.empty:
-            df_hist['FECHA'] = pd.to_datetime(df_hist['FECHA'])
+        if not df.empty:
+            df['FECHA'] = pd.to_datetime(df['FECHA'])
             
-            # Gráfico Principal (Tu gráfico de siempre)
+            # Gráfico 1: Real
             fig = go.Figure()
-            fig.add_trace(go.Scatter(x=df_hist['FECHA'], y=df_hist['VALUE'], name="Nivel Real", mode='lines+markers', line=dict(color='#00ffcc', width=2)))
+            fig.add_trace(go.Scatter(x=df['FECHA'], y=df['VALUE'], name="Nivel Real", line=dict(color='#00ffcc', width=2)))
             
-            # --- PREDICCIÓN SIN MODIFICAR TU INDICADOR NI EL RESTO ---
-            # Proyección lineal simple basada en últimos 20 puntos para evitar el error de ARIMA/statsmodels
-            if len(df_hist) >= 20:
-                puntos_base = df_hist.tail(20)
-                pendiente = (puntos_base['VALUE'].iloc[-1] - puntos_base['VALUE'].iloc[0]) / 20
-                
-                future_dates = [puntos_base['FECHA'].iloc[-1] + timedelta(hours=i) for i in range(1, 13)]
-                future_vals = [puntos_base['VALUE'].iloc[-1] + (pendiente * i) for i in range(1, 13)]
-                
-                fig.add_trace(go.Scatter(x=future_dates, y=future_vals, name="Predicción 12h", line=dict(color='#ffcc00', dash='dot')))
-            
-            fig.update_layout(template="plotly_dark", height=300, margin=dict(t=30, b=30, l=10, r=10), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', hovermode="x unified")
+            # Gráfico 2: Predicción simple (Pendiente de los últimos 20 puntos)
+            if len(df) >= 20:
+                puntos = df.tail(20)
+                pend = (puntos['VALUE'].iloc[-1] - puntos['VALUE'].iloc[0]) / 20
+                futuro_x = [puntos['FECHA'].iloc[-1] + timedelta(hours=i) for i in range(1, 24)]
+                futuro_y = [puntos['VALUE'].iloc[-1] + (pend * i) for i in range(1, 24)]
+                fig.add_trace(go.Scatter(x=futuro_x, y=futuro_y, name="Tendencia (Predicción)", line=dict(color='#ffcc00', dash='dot')))
+
+            fig.update_layout(template="plotly_dark", height=300, margin=dict(t=20, b=20), hovermode="x unified")
             st.plotly_chart(fig, use_container_width=True)
-            
         else:
-            st.warning("Sin datos para este periodo.")
+            st.warning("No hay datos para este rango.")
     except Exception as e:
-        st.error(f"Error cargando tanque: {e}")
+        st.error(f"Error técnico: {e}")
 
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
 
