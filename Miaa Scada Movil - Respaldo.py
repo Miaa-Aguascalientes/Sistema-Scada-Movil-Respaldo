@@ -740,8 +740,8 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
                 patron = df[df['FECHA'] > (df['FECHA'].max() - timedelta(hours=24))]
                 
                 # Desplazamos el patrón al futuro
-                future_x = [t + timedelta(hours=24) for t in patron['FECHA']]
-                fig.add_trace(go.Scatter(x=future_x, y=patron['VALUE'], name="Predicción (Patrón 24h)", 
+                future_x = [t + timedelta(hours=48) for t in patron['FECHA']]
+                fig.add_trace(go.Scatter(x=future_x, y=patron['VALUE'], name="Predicción (Patrón 48h)", 
                                          line=dict(color='#ffcc00', width=2, dash='dot')))
             
             fig.update_layout(template="plotly_dark", height=400, hovermode="x unified", margin=dict(t=30, b=30))
