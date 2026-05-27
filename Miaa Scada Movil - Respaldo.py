@@ -730,7 +730,13 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
 
     try:
         engine = get_mysql_scada_engine()
-        query = f"SELECT h.FECHA, h.VALUE FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME = '{info_t['tag_nivel']}' AND h.FECHA BETWEEN '{f_ini.strftime('%Y-%m-%d %H:%M:%S')}' AND '{f_fin.strftime('%Y-%m-%d %H:%M:%S')}' ORDER BY h.FECHA ASC"
+        # Consulta corregida para eliminar ambigüedad
+        query = f"""SELECT h.FECHA, h.VALUE 
+                    FROM vfitagnumhistory h 
+                    JOIN VfiTagRef r ON h.GATEID = r.GATEID 
+                    WHERE r.NAME = '{info_t['tag_nivel']}' 
+                    AND h.FECHA BETWEEN '{f_ini.strftime('%Y-%m-%d %H:%M:%S')}' AND '{f_fin.strftime('%Y-%m-%d %H:%M:%S')}' 
+                    ORDER BY h.FECHA ASC"""
         df = pd.read_sql(query, engine)
         
         if not df.empty:
@@ -742,23 +748,34 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
             fig1.update_layout(template="plotly_dark", height=300, margin=dict(t=20, b=20), hovermode="x unified")
             st.plotly_chart(fig1, use_container_width=True)
             
-            # --- GRÁFICO 2: PROYECCIÓN ---
-            st.markdown("#### 🔮 Proyección (Tendencia 12h)")
+            # --- GRÁFICO 2: PROYECCIÓN 7 DÍAS ---
+            st.markdown("#### 🔮 Proyección (Tendencia 7 días)")
             if len(df) >= 20:
-                puntos = df.tail(20)
-                pend = (puntos['VALUE'].iloc[-1] - puntos['VALUE'].iloc[0]) / 20
-                futuro_x = [puntos['FECHA'].iloc[-1] + timedelta(hours=i) for i in range(1, 13)]
-                futuro_y = [puntos['VALUE'].iloc[-1] + (pend * i) for i in range(1, 13)]
+                # Calculamos tendencia lineal basada en el historial
+                x = np.arange(len(df))
+                y = df['VALUE'].values
+                coef = np.polyfit(x, y, 1) # Pendiente lineal
+                poly1d_fn = np.poly1d(coef)
                 
-                fig2 = go.Figure(go.Scatter(x=futuro_x, y=futuro_y, name="Predicción", line=dict(color='#ffcc00', dash='dot')))
+                # Proyectamos 7 días (168 horas)
+                # Asumimos que los datos llegan cada hora; si no, ajusta el paso
+                pasos_futuros = 168 
+                future_x = np.arange(len(df), len(df) + pasos_futuros)
+                future_dates = [df['FECHA'].iloc[-1] + timedelta(hours=i) for i in range(1, pasos_futuros + 1)]
+                future_y = poly1d_fn(future_x)
+                
+                # Evitar negativos
+                future_y = np.maximum(future_y, 0)
+                
+                fig2 = go.Figure(go.Scatter(x=future_dates, y=future_y, name="Predicción 7 días", line=dict(color='#ffcc00', dash='dot')))
                 fig2.update_layout(template="plotly_dark", height=300, margin=dict(t=20, b=20), hovermode="x unified")
                 st.plotly_chart(fig2, use_container_width=True)
             else:
-                st.warning("Datos insuficientes para la proyección.")
+                st.warning("Datos insuficientes para proyección.")
         else:
             st.warning("No hay datos para este rango.")
     except Exception as e:
-        st.error(f"Error cargando datos: {e}")
+        st.error(f"Error técnico: {e}")
 
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
 
