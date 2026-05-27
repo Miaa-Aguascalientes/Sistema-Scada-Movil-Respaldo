@@ -790,5 +790,8 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
             fig_pred.update_layout(template="plotly_dark", height=300, hovermode="x unified", margin=dict(t=30, b=30))
             st.plotly_chart(fig_pred, use_container_width=True)
 
+    except Exception as e:
+        st.error(f"Error: {e}")
+
 
 
