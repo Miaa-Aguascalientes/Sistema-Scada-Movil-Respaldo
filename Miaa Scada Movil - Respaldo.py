@@ -711,15 +711,12 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
         </div>
     ''', unsafe_allow_html=True)
     
-    # 2. SELECTOR (INTACTO)
-    opciones = ["Últimos 7 días", "Últimos 14 días", "Este Mes"]
+    # 2. SELECTOR
+    opciones = ["Últimos 7 días", "Últimos 14 días"]
     opcion_fecha = st.selectbox("Selecciona rango:", opciones)
-    hoy = datetime.now()
-    if opcion_fecha == "Últimos 7 días": f_ini = hoy - timedelta(days=7)
-    elif opcion_fecha == "Últimos 14 días": f_ini = hoy - timedelta(days=14)
-    else: f_ini = hoy.replace(day=1, hour=0, minute=0)
+    f_ini = datetime.now() - timedelta(days=7 if "7" in opcion_fecha else 14)
 
-    # 3. MODELO AUTORREGRESIVO (AR)
+    # 3. MODELO DE REPLICACIÓN DE CICLOS (No promedia, REPLICA los picos)
     try:
         engine = get_mysql_scada_engine()
         query = f"SELECT FECHA, VALUE FROM vfitagnumhistory WHERE GATEID IN (SELECT GATEID FROM VfiTagRef WHERE NAME = '{info_t['tag_nivel']}') AND FECHA >= '{f_ini.strftime('%Y-%m-%d %H:%M:%S')}' ORDER BY FECHA ASC"
@@ -727,34 +724,33 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
         
         if not df.empty:
             df['FECHA'] = pd.to_datetime(df['FECHA'])
-            series = df['VALUE'].values
             
-            # --- MODELO AR(p): Predicción basada en memoria de los últimos 24 pasos ---
-            p = 24 
-            # Calculamos coeficientes para que la predicción "sienta" la tendencia
-            y = series[p:]
-            X = np.column_stack([series[i:-(p-i)] for i in range(p)])
-            coefs = np.linalg.lstsq(X, y, rcond=None)[0]
-            
-            # Proyectar 168 horas (7 días)
-            predicciones = list(series[-p:])
-            for _ in range(168):
-                nuevo_val = np.dot(predicciones[-p:], coefs)
-                predicciones.append(max(0, nuevo_val)) # FÍSICAMENTE POSIBLE
-            
-            future_vals = predicciones[p:]
-            fin_historia = df['FECHA'].iloc[-1]
-            future_dates = [fin_historia + timedelta(hours=i) for i in range(1, 169)]
-            
-            # 4. GRÁFICO
+            # --- MODELO: Extracción de Ciclos ---
+            # Identificamos el ciclo promedio (tiempo entre picos)
+            picos = df[df['VALUE'] > 4] # Filtramos momentos donde el tanque se llenó
+            if len(picos) > 1:
+                # Calculamos el tiempo promedio entre llenados
+                diffs = picos['FECHA'].diff().mean()
+                # Proyectamos: tomamos la forma del último ciclo y lo desplazamos
+                last_cycle = df[df['FECHA'] > (df['FECHA'].max() - diffs)].copy()
+                last_cycle['FECHA'] = last_cycle['FECHA'] + diffs
+                
+                future_dates = last_cycle['FECHA']
+                future_vals = last_cycle['VALUE']
+            else:
+                # Fallback simple si no hay picos claros
+                future_dates = [df['FECHA'].iloc[-1] + timedelta(hours=i) for i in range(1, 169)]
+                future_vals = df['VALUE'].iloc[-len(future_dates):].values
+
+            # 4. GRÁFICO ÚNICO
             fig = go.Figure()
             fig.add_trace(go.Scatter(x=df['FECHA'], y=df['VALUE'], name="Real", line=dict(color='#00d4ff', width=2)))
-            fig.add_trace(go.Scatter(x=future_dates, y=future_vals, name="Predicción AR(24)", line=dict(color='#ffcc00', width=2, dash='dot')))
+            fig.add_trace(go.Scatter(x=future_dates, y=future_vals, name="Predicción (Replicación Ciclo)", line=dict(color='#ffcc00', width=2, dash='dot')))
             
             fig.update_layout(template="plotly_dark", height=400, hovermode="x unified", margin=dict(t=30, b=30))
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.warning("No hay datos.")
+            st.warning("No hay suficientes datos.")
     except Exception as e:
         st.error(f"Error técnico: {e}")
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
