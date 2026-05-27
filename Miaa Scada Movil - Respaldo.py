@@ -701,23 +701,25 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
     id_tq = st.session_state.activo_id
     info_t = mapa_tanques_dict.get(id_tq)
     
+    # 1. INDICADOR
     st.markdown(f"<h3 style='color:#00d4ff;'>🛢️ Análisis de Nivel: {info_t['nombre']}</h3>", unsafe_allow_html=True)
-
-    # 1. Indicador original (Mantenido)
-    data_tq = cargar_datos_scada([info_t['tag_nivel']])
-    ultimo_nivel, fecha_lectura = data_tq.get(info_t['tag_nivel'], (0.0, "N/A"))
+    ultimo_nivel, _ = cargar_datos_scada([info_t['tag_nivel']]).get(info_t['tag_nivel'], (0.0, "N/A"))
+    
     st.markdown(f'''
         <div style="border: 2px solid #00d4ff; padding: 10px; border-radius: 12px; text-align: center; margin-bottom: 20px; background: rgba(0, 212, 255, 0.05);">
             <p style="color: white; font-size: 32px; font-weight: bold; margin: 0;">{float(ultimo_nivel):,.2f} <span style="font-size: 18px; color: #00d4ff;">Mts</span></p>
         </div>
     ''', unsafe_allow_html=True)
     
-    # 2. Selector de fechas (Mantenido)
-    opciones = ["Últimos 7 días", "Últimos 14 días"]
+    # 2. SELECTOR (INTACTO)
+    opciones = ["Últimos 7 días", "Últimos 14 días", "Este Mes"]
     opcion_fecha = st.selectbox("Selecciona rango:", opciones)
-    f_ini = datetime.now() - timedelta(days=7 if "7" in opcion_fecha else 14)
+    hoy = datetime.now()
+    if opcion_fecha == "Últimos 7 días": f_ini = hoy - timedelta(days=7)
+    elif opcion_fecha == "Últimos 14 días": f_ini = hoy - timedelta(days=14)
+    else: f_ini = hoy.replace(day=1, hour=0, minute=0)
 
-    # 3. Consulta y Predicción (Optimizada y Corregida)
+    # 3. MODELO AUTORREGRESIVO (AR)
     try:
         engine = get_mysql_scada_engine()
         query = f"SELECT FECHA, VALUE FROM vfitagnumhistory WHERE GATEID IN (SELECT GATEID FROM VfiTagRef WHERE NAME = '{info_t['tag_nivel']}') AND FECHA >= '{f_ini.strftime('%Y-%m-%d %H:%M:%S')}' ORDER BY FECHA ASC"
@@ -725,26 +727,34 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
         
         if not df.empty:
             df['FECHA'] = pd.to_datetime(df['FECHA'])
+            series = df['VALUE'].values
             
-            # --- MODELO: Perfil promedio de las últimas 24 horas para cada hora del día ---
-            # Esto proyecta el ciclo real sin inventar tendencias lineales negativas
-            df['hora'] = df['FECHA'].dt.hour
-            perfil_horario = df.groupby('hora')['VALUE'].mean()
+            # --- MODELO AR(p): Predicción basada en memoria de los últimos 24 pasos ---
+            p = 24 
+            # Calculamos coeficientes para que la predicción "sienta" la tendencia
+            y = series[p:]
+            X = np.column_stack([series[i:-(p-i)] for i in range(p)])
+            coefs = np.linalg.lstsq(X, y, rcond=None)[0]
             
-            # Crear fechas futuras (7 días)
-            last_date = df['FECHA'].iloc[-1]
-            future_dates = [last_date + timedelta(hours=i) for i in range(1, 169)]
-            future_vals = [perfil_horario.get(d.hour, 0) for d in future_dates]
+            # Proyectar 168 horas (7 días)
+            predicciones = list(series[-p:])
+            for _ in range(168):
+                nuevo_val = np.dot(predicciones[-p:], coefs)
+                predicciones.append(max(0, nuevo_val)) # FÍSICAMENTE POSIBLE
             
-            # --- GRÁFICO ÚNICO (Azul Real / Amarilla Predicción) ---
+            future_vals = predicciones[p:]
+            fin_historia = df['FECHA'].iloc[-1]
+            future_dates = [fin_historia + timedelta(hours=i) for i in range(1, 169)]
+            
+            # 4. GRÁFICO
             fig = go.Figure()
             fig.add_trace(go.Scatter(x=df['FECHA'], y=df['VALUE'], name="Real", line=dict(color='#00d4ff', width=2)))
-            fig.add_trace(go.Scatter(x=future_dates, y=future_vals, name="Predicción 7 días", line=dict(color='#ffcc00', width=2, dash='dot')))
+            fig.add_trace(go.Scatter(x=future_dates, y=future_vals, name="Predicción AR(24)", line=dict(color='#ffcc00', width=2, dash='dot')))
             
             fig.update_layout(template="plotly_dark", height=400, hovermode="x unified", margin=dict(t=30, b=30))
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.warning("No hay suficientes datos.")
+            st.warning("No hay datos.")
     except Exception as e:
         st.error(f"Error técnico: {e}")
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
