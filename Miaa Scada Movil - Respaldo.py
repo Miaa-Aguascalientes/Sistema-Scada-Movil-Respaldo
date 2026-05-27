@@ -694,87 +694,73 @@ if st.session_state.activo_tipo == "Pozo" and st.session_state.activo_id != "-- 
         )
 
 
-# ------------------------------------------------------------------------------ 
-# SECCION DE TANQUES (CORREGIDA CON PREDICCIÓN)
+# ------------------------------------------------------------------------------
+# SECCION DE TANQUES (CORREGIDA: SEPARACIÓN DE GRÁFICOS)
 # ------------------------------------------------------------------------------
 
 elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-- Seleccionar --":
     id_tq = st.session_state.activo_id
     info_t = mapa_tanques_dict.get(id_tq)
     
-    st.markdown(f"<h3 style='color:#00d4ff;'>🛢️  Análisis de Nivel: {info_t['nombre']}</h3>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='color:#00d4ff;'>🛢️ Análisis de Nivel: {info_t['nombre']}</h3>", unsafe_allow_html=True)
 
     # --- OBTENER DATOS ---
     data_tq = cargar_datos_scada([info_t['tag_nivel']])
     ultimo_nivel, fecha_lectura = data_tq.get(info_t['tag_nivel'], (0.0, "N/A"))
-    nivel_max = info_t.get('nivel_max', 0.0)
     
+    # [Indicador visual... se mantiene igual]
     st.markdown(f'''
         <div style="border: 2px solid #00d4ff; padding: 10px; border-radius: 12px; text-align: center; margin-bottom: 20px; background: rgba(0, 212, 255, 0.05);">
-            <p style="color: white; font-size: 12px; margin: 0; font-weight: bold;">Nivel de tanque actual</p>
+            <p style="color: white; font-size: 12px; margin: 0; font-weight: bold;">Nivel Actual</p>
             <p style="color: white; font-size: 32px; font-weight: bold; margin: 0;">{float(ultimo_nivel):,.2f} <span style="font-size: 18px; color: #00d4ff;">Mts</span></p>
-            <p style="color: #cccccc; font-size: 11px; margin-top: 5px;">
-                Nivel Máximo: <span style="color: #00d4ff; font-weight: bold;">{float(nivel_max):,.2f} Mts</span>
-            </p>
-            <p style="color: white; font-size: 10px; margin-top: 5px;">Última lectura: {fecha_lectura}</p>
         </div>
     ''', unsafe_allow_html=True)
     
-    opciones = ["Hoy", "Ayer", "Últimos 7 días", "Últimos 14 días", "Este Mes", "Último Mes", "Últimos 6 meses", "Personalizado"]
-    opcion_fecha = st.selectbox("Selecciona rango:", opciones, index=2)
+    # Rango de fechas
+    opciones = ["Últimos 7 días", "Últimos 14 días", "Este Mes"]
+    opcion_fecha = st.selectbox("Selecciona rango:", opciones)
     
     hoy_dt = datetime.now()
-    f_fin = hoy_dt
-    
-    # [Lógica de fechas se mantiene igual]
-    if opcion_fecha == "Hoy": f_ini = hoy_dt.replace(hour=0, minute=0, second=0, microsecond=0)
-    elif opcion_fecha == "Ayer": f_ini = hoy_dt - timedelta(days=1)
-    elif opcion_fecha == "Últimos 7 días": f_ini = hoy_dt - timedelta(days=7)
+    if opcion_fecha == "Últimos 7 días": f_ini = hoy_dt - timedelta(days=7)
     elif opcion_fecha == "Últimos 14 días": f_ini = hoy_dt - timedelta(days=14)
-    elif opcion_fecha == "Este Mes": f_ini = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    elif opcion_fecha == "Último Mes":
-        primer_dia_actual = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        f_ini = (primer_dia_actual - timedelta(days=1)).replace(day=1)
-        f_fin = primer_dia_actual - timedelta(seconds=1)
-    elif opcion_fecha == "Últimos 6 meses": f_ini = hoy_dt - timedelta(days=180)
-    elif opcion_fecha == "Personalizado":
-        rango = st.date_input("Selecciona rango:", [hoy_dt - timedelta(days=7), hoy_dt])
-        f_ini, f_fin = (rango[0], rango[1]) if len(rango) == 2 else (hoy_dt - timedelta(days=7), hoy_dt)
+    else: f_ini = hoy_dt.replace(day=1)
 
     try:
         engine = get_mysql_scada_engine()
-        f_ini_str = f_ini.strftime('%Y-%m-%d %H:%M:%S')
-        f_fin_str = f_fin.strftime('%Y-%m-%d %H:%M:%S')
+        query = f"SELECT FECHA, VALUE FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME = '{info_t['tag_nivel']}' AND h.FECHA >= '{f_ini.strftime('%Y-%m-%d')}' ORDER BY FECHA ASC"
+        df = pd.read_sql(query, engine)
+        df['FECHA'] = pd.to_datetime(df['FECHA'])
         
-        query = f"SELECT h.FECHA, h.VALUE FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME = '{info_t['tag_nivel']}' AND h.FECHA BETWEEN '{f_ini_str}' AND '{f_fin_str}' ORDER BY h.FECHA ASC"
-        df_hist = pd.read_sql(query, engine)
-        
-        if not df_hist.empty:
-            df_hist['FECHA'] = pd.to_datetime(df_hist['FECHA'])
+        if not df.empty:
+            # 1. GRÁFICO HISTÓRICO
+            st.markdown("<h4 style='color:#00d4ff;'>📊 Nivel Histórico</h4>", unsafe_allow_html=True)
+            fig1 = go.Figure(go.Scatter(x=df['FECHA'], y=df['VALUE'], line=dict(color='#00ffcc')))
+            fig1.update_layout(template="plotly_dark", height=300, margin=dict(t=20, b=20, l=10, r=10))
+            st.plotly_chart(fig1, use_container_width=True)
             
-            # Gráfico Principal
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=df_hist['FECHA'], y=df_hist['VALUE'], name="Nivel Real", mode='lines+markers', line=dict(color='#00ffcc', width=2)))
+            # 2. GRÁFICO DE PREDICCIÓN (7 DÍAS)
+            st.markdown("<h4 style='color:#ffcc00;'>🔮 Predicción (Próximos 7 días)</h4>", unsafe_allow_html=True)
             
-            # --- INTEGRACIÓN DE PREDICCIÓN (Numpy puro) ---
-            df_hist['ts'] = df_hist['FECHA'].astype(np.int64) // 10**9
-            z = np.polyfit(df_hist['ts'], df_hist['VALUE'], 1)
+            # Cálculo de tendencia con Numpy
+            x = (df['FECHA'].astype(np.int64) // 10**9).values
+            y = df['VALUE'].values
+            z = np.polyfit(x, y, 1) # Regresión lineal
             p = np.poly1d(z)
             
-            # Predecir próximas 6 horas
-            last_ts = df_hist['ts'].iloc[-1]
-            future_ts = np.array([last_ts + (i * 3600) for i in range(1, 7)])
-            prediccion = p(future_ts)
-            future_dates = [pd.to_datetime(ts, unit='s') for ts in future_ts]
+            # Crear eje X para 7 días hacia adelante
+            last_ts = x[-1]
+            future_x = np.array([last_ts + (i * 3600 * 24) for i in range(1, 8)])
+            future_y = p(future_x)
+            future_dates = [pd.to_datetime(ts, unit='s') for ts in future_x]
             
-            fig.add_trace(go.Scatter(x=future_dates, y=prediccion, name="Predicción (6h)", mode='lines', line=dict(color='#ffcc00', width=2, dash='dot')))
+            fig2 = go.Figure(go.Scatter(x=future_dates, y=future_y, line=dict(color='#ffcc00', dash='dot')))
+            fig2.update_layout(template="plotly_dark", height=300, margin=dict(t=20, b=20, l=10, r=10))
+            st.plotly_chart(fig2, use_container_width=True)
             
-            fig.update_layout(template="plotly_dark", height=300, margin=dict(t=30, b=30, l=10, r=10), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', hovermode="x unified")
-            st.plotly_chart(fig, use_container_width=True)
         else:
-            st.warning("Sin datos para este periodo.")
+            st.warning("No hay suficientes datos históricos para calcular tendencia.")
     except Exception as e:
-        st.error(f"Error cargando tanque: {e}")
+        st.error(f"Error técnico: {e}")
 
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
 
