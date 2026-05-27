@@ -702,7 +702,7 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
     
     st.markdown(f"<h3 style='color:#00d4ff;'>🛢️ Análisis de Nivel: {info_t['nombre']}</h3>", unsafe_allow_html=True)
 
-    # 1. Indicador original (INTACTO)
+    # --- INDICADOR ORIGINAL (INTACTO) ---
     data_tq = cargar_datos_scada([info_t['tag_nivel']])
     ultimo_nivel, fecha_lectura = data_tq.get(info_t['tag_nivel'], (0.0, "N/A"))
     nivel_max = info_t.get('nivel_max', 0.0)
@@ -717,8 +717,8 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
             <p style="color: white; font-size: 10px; margin-top: 5px;">Última lectura: {fecha_lectura}</p>
         </div>
     ''', unsafe_allow_html=True)
-
-    # 2. Selector de fechas (Variables definidas antes de su uso)
+    
+    # --- SELECTOR DE FECHAS ---
     opciones = ["Últimos 7 días", "Últimos 14 días", "Este Mes"]
     opcion_fecha = st.selectbox("Selecciona rango:", opciones)
     
@@ -728,38 +728,37 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
     else: f_ini = hoy_dt.replace(day=1, hour=0, minute=0)
     f_fin = hoy_dt
 
-    # 3. Consulta SQL y Gráficos
     try:
         engine = get_mysql_scada_engine()
-        query = f"""SELECT h.FECHA, h.VALUE 
-                    FROM vfitagnumhistory h 
-                    JOIN VfiTagRef r ON h.GATEID = r.GATEID 
-                    WHERE r.NAME = '{info_t['tag_nivel']}' 
-                    AND h.FECHA >= '{f_ini.strftime('%Y-%m-%d %H:%M:%S')}' 
-                    ORDER BY h.FECHA ASC"""
+        query = f"SELECT h.FECHA, h.VALUE FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME = '{info_t['tag_nivel']}' AND h.FECHA BETWEEN '{f_ini.strftime('%Y-%m-%d %H:%M:%S')}' AND '{f_fin.strftime('%Y-%m-%d %H:%M:%S')}' ORDER BY h.FECHA ASC"
         df = pd.read_sql(query, engine)
         
         if not df.empty:
             df['FECHA'] = pd.to_datetime(df['FECHA'])
             
-            # Gráfico 1: Real
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=df['FECHA'], y=df['VALUE'], name="Nivel Real", line=dict(color='#00ffcc', width=2)))
+            # --- GRÁFICO 1: REAL ---
+            st.markdown("#### 📊 Nivel Histórico Real")
+            fig1 = go.Figure(go.Scatter(x=df['FECHA'], y=df['VALUE'], name="Real", line=dict(color='#00ffcc', width=2)))
+            fig1.update_layout(template="plotly_dark", height=300, margin=dict(t=20, b=20), hovermode="x unified")
+            st.plotly_chart(fig1, use_container_width=True)
             
-            # Gráfico 2: Predicción simple (Pendiente de los últimos 20 puntos)
+            # --- GRÁFICO 2: PROYECCIÓN ---
+            st.markdown("#### 🔮 Proyección (Tendencia 12h)")
             if len(df) >= 20:
                 puntos = df.tail(20)
                 pend = (puntos['VALUE'].iloc[-1] - puntos['VALUE'].iloc[0]) / 20
-                futuro_x = [puntos['FECHA'].iloc[-1] + timedelta(hours=i) for i in range(1, 24)]
-                futuro_y = [puntos['VALUE'].iloc[-1] + (pend * i) for i in range(1, 24)]
-                fig.add_trace(go.Scatter(x=futuro_x, y=futuro_y, name="Tendencia (Predicción)", line=dict(color='#ffcc00', dash='dot')))
-
-            fig.update_layout(template="plotly_dark", height=300, margin=dict(t=20, b=20), hovermode="x unified")
-            st.plotly_chart(fig, use_container_width=True)
+                futuro_x = [puntos['FECHA'].iloc[-1] + timedelta(hours=i) for i in range(1, 13)]
+                futuro_y = [puntos['VALUE'].iloc[-1] + (pend * i) for i in range(1, 13)]
+                
+                fig2 = go.Figure(go.Scatter(x=futuro_x, y=futuro_y, name="Predicción", line=dict(color='#ffcc00', dash='dot')))
+                fig2.update_layout(template="plotly_dark", height=300, margin=dict(t=20, b=20), hovermode="x unified")
+                st.plotly_chart(fig2, use_container_width=True)
+            else:
+                st.warning("Datos insuficientes para la proyección.")
         else:
             st.warning("No hay datos para este rango.")
     except Exception as e:
-        st.error(f"Error técnico: {e}")
+        st.error(f"Error cargando datos: {e}")
 
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
 
