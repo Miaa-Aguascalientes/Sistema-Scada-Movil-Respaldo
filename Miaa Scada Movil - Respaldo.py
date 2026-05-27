@@ -699,71 +699,48 @@ if st.session_state.activo_tipo == "Pozo" and st.session_state.activo_id != "-- 
 # ------------------------------------------------------------------------------
 
 elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-- Seleccionar --":
-    from statsmodels.tsa.arima.model import ARIMA
-    
     id_tq = st.session_state.activo_id
     info_t = mapa_tanques_dict.get(id_tq)
     
     st.markdown(f"<h3 style='color:#00d4ff;'>🛢️ Análisis de Nivel: {info_t['nombre']}</h3>", unsafe_allow_html=True)
 
-    # --- DATOS ACTUALES ---
+    # Cargar datos
     data_tq = cargar_datos_scada([info_t['tag_nivel']])
-    ultimo_nivel, fecha_lectura = data_tq.get(info_t['tag_nivel'], (0.0, "N/A"))
+    ultimo_nivel, _ = data_tq.get(info_t['tag_nivel'], (0.0, "N/A"))
     
-    st.markdown(f'''
-        <div style="border: 2px solid #00d4ff; padding: 10px; border-radius: 12px; text-align: center; margin-bottom: 20px; background: rgba(0, 212, 255, 0.05);">
-            <p style="color: white; font-size: 12px; margin: 0; font-weight: bold;">Nivel Actual</p>
-            <p style="color: white; font-size: 32px; font-weight: bold; margin: 0;">{float(ultimo_nivel):,.2f} <span style="font-size: 18px; color: #00d4ff;">Mts</span></p>
-        </div>
-    ''', unsafe_allow_html=True)
-
-    # --- RANGO TEMPORAL ---
-    opciones = ["Últimos 7 días", "Últimos 14 días", "Este Mes", "Personalizado"]
-    opcion_fecha = st.selectbox("Selecciona rango:", opciones, index=0)
-    hoy_dt = datetime.now()
+    st.metric("Nivel Actual", f"{float(ultimo_nivel):,.2f} Mts")
     
-    if opcion_fecha == "Últimos 7 días": f_ini = hoy_dt - timedelta(days=7)
-    elif opcion_fecha == "Últimos 14 días": f_ini = hoy_dt - timedelta(days=14)
-    elif opcion_fecha == "Este Mes": f_ini = hoy_dt.replace(day=1, hour=0, minute=0)
-    else:
-        rango = st.date_input("Selecciona rango:", [hoy_dt - timedelta(days=7), hoy_dt])
-        f_ini = rango[0] if len(rango) == 2 else hoy_dt - timedelta(days=7)
-
-    # --- CONSULTA Y PROCESAMIENTO ---
+    # Consulta SQL directa
     try:
         engine = get_mysql_scada_engine()
-        query = f"SELECT FECHA, VALUE FROM vfitagnumhistory WHERE GATEID IN (SELECT GATEID FROM VfiTagRef WHERE NAME = '{info_t['tag_nivel']}') AND FECHA >= '{f_ini.strftime('%Y-%m-%d %H:%M:%S')}' ORDER BY FECHA ASC"
-        df_hist = pd.read_sql(query, engine)
-        
-        if not df_hist.empty:
-            # Limpieza obligatoria para evitar el error de freq de pandas
-            df_hist['FECHA'] = pd.to_datetime(df_hist['FECHA'])
-            df_hist = df_hist.drop_duplicates(subset=['FECHA']).sort_values('FECHA')
-            df_hist.set_index('FECHA', inplace=True)
+        query = f"SELECT FECHA, VALUE FROM vfitagnumhistory WHERE GATEID IN (SELECT GATEID FROM VfiTagRef WHERE NAME = '{info_t['tag_nivel']}') ORDER BY FECHA DESC LIMIT 200"
+        df = pd.read_sql(query, engine)
+        df['FECHA'] = pd.to_datetime(df['FECHA'])
+        df = df.sort_values('FECHA')
+
+        if len(df) > 10:
+            # GRÁFICO 1: REAL
+            fig1 = go.Figure(go.Scatter(x=df['FECHA'], y=df['VALUE'], name="Real", line=dict(color='#00ffcc')))
+            fig1.update_layout(template="plotly_dark", height=250, margin=dict(t=20, b=20))
+            st.markdown("#### 📊 Histórico")
+            st.plotly_chart(fig1, use_container_width=True)
+
+            # GRÁFICO 2: PROYECCIÓN (Cálculo directo sin librerías externas)
+            # Calculamos la pendiente media de los últimos 20 registros
+            ultimo_valor = df['VALUE'].iloc[-1]
+            pendiente = (df['VALUE'].iloc[-1] - df['VALUE'].iloc[-20]) / 20
             
-            # Gráfico Histórico
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=df_hist.index, y=df_hist['VALUE'], name="Nivel Real", line=dict(color='#00ffcc')))
-
-            # Predicción ARIMA
-            if len(df_hist) > 50:
-                try:
-                    # Resample a horas para evitar errores de intervalos irregulares
-                    df_resampled = df_hist['VALUE'].resample('h').mean().interpolate().fillna(method='ffill')
-                    model = ARIMA(df_resampled, order=(1, 1, 1))
-                    model_fit = model.fit()
-                    forecast = model_fit.forecast(steps=12)
-                    
-                    fig.add_trace(go.Scatter(x=forecast.index, y=forecast, name="Predicción ARIMA", line=dict(color='#ffcc00', dash='dot')))
-                except Exception as e:
-                    st.sidebar.error(f"Error en modelo: {e}")
-
-            fig.update_layout(template="plotly_dark", height=350, margin=dict(t=30, b=30, l=10, r=10), hovermode="x unified")
-            st.plotly_chart(fig, use_container_width=True)
+            future_dates = [df['FECHA'].iloc[-1] + timedelta(hours=i) for i in range(1, 13)]
+            future_values = [ultimo_valor + (pendiente * i) for i in range(1, 13)]
             
-
+            fig2 = go.Figure(go.Scatter(x=future_dates, y=future_values, name="Predicción", line=dict(color='#ffcc00', dash='dot')))
+            fig2.update_layout(template="plotly_dark", height=250, margin=dict(t=20, b=20))
+            st.markdown("#### 🔮 Predicción (Tendencia 12h)")
+            st.plotly_chart(fig2, use_container_width=True)
+        else:
+            st.error("No hay suficientes datos para graficar.")
     except Exception as e:
-        st.error(f"Error técnico: {e}")
+        st.error(f"Error cargando datos: {e}")
 
 
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
