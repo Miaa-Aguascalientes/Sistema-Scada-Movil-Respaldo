@@ -787,11 +787,11 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
                 line=dict(color='#00d4ff', width=2)
             ))
             
-            fig_pred.update_layout(template="plotly_dark", height=300, hovermode="x unified", margin=dict(t=30, b=30))
-            st.plotly_chart(fig_pred, use_container_width=True)
+            else:
+                st.warning("Sin datos para este periodo.")
+        except Exception as e:
+            st.error(f"Error procesando datos: {e}")
 
-    except Exception as e:
-        st.error(f"Error: {e}")
 
 
 
