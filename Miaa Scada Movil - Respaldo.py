@@ -699,14 +699,19 @@ if st.session_state.activo_tipo == "Pozo" and st.session_state.activo_id != "-- 
 # ------------------------------------------------------------------------------
 
 elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-- Seleccionar --":
-    from statsmodels.tsa.arima.model import ARIMA # IMPORTANTE: Añade esto al inicio del archivo
+    # IMPORTACIÓN CORREGIDA: Verifica si está instalado
+    try:
+        from statsmodels.tsa.arima.model import ARIMA
+    except ImportError:
+        st.error("La librería 'statsmodels' no está instalada en el entorno. Ejecuta: pip install statsmodels")
+        ARIMA = None
     
     id_tq = st.session_state.activo_id
     info_t = mapa_tanques_dict.get(id_tq)
     
     st.markdown(f"<h3 style='color:#00d4ff;'>🛢️ Análisis de Nivel: {info_t['nombre']}</h3>", unsafe_allow_html=True)
 
-    # --- OBTENER DATOS REALES ---
+    # --- OBTENER DATOS ---
     data_tq = cargar_datos_scada([info_t['tag_nivel']])
     ultimo_nivel, fecha_lectura = data_tq.get(info_t['tag_nivel'], (0.0, "N/A"))
     
@@ -717,12 +722,12 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
         </div>
     ''', unsafe_allow_html=True)
 
-    # Rango para alimentar el modelo (mínimo 7 días para tener datos suficientes)
+    # Obtenemos datos históricos
     df_hist = obtener_historia_7_dias(info_t['tag_nivel'])
     
-    if not df_hist.empty and len(df_hist) > 50:
-        # Preprocesamiento: remuestreo a horas para suavizar la serie
-        df_hist = df_hist.set_index('FECHA').resample('H').mean().interpolate().fillna(method='ffill')
+    if not df_hist.empty and len(df_hist) > 20 and ARIMA is not None:
+        # Preprocesamiento: Limpieza y resampleo obligatorio para ARIMA
+        df_hist = df_hist.set_index('FECHA').resample('H').mean().interpolate(method='linear')
         
         # 1. GRÁFICO HISTÓRICO REAL
         fig = go.Figure()
@@ -730,26 +735,27 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
 
         # 2. MODELADO ARIMA
         try:
-            # ARIMA(5,1,0) - Ajustable según la frecuencia de tus datos
-            model = ARIMA(df_hist['VALUE'], order=(5, 1, 0))
+            # Usamos un modelo más simple (1,1,1) que es mucho más estable para niveles
+            model = ARIMA(df_hist['VALUE'].fillna(method='ffill'), order=(1, 1, 1))
             model_fit = model.fit()
             
-            # Proyección 24 horas (ajusta steps= según lo que necesites)
-            forecast = model_fit.forecast(steps=24)
+            # Proyección
+            forecast = model_fit.forecast(steps=12)
             
             fig.add_trace(go.Scatter(
                 x=forecast.index, y=forecast, 
                 name="Predicción ARIMA", 
                 line=dict(color='#ffcc00', width=2, dash='dot')
             ))
+            st.success("Modelo ARIMA calculado exitosamente.")
         except Exception as e:
-            st.warning("No se pudo calcular la tendencia ARIMA (datos insuficientes o inestables).")
+            st.warning(f"No se pudo completar la proyección ARIMA: {e}")
 
         fig.update_layout(template="plotly_dark", height=300, margin=dict(t=20, b=20), hovermode="x unified")
         st.plotly_chart(fig, use_container_width=True)
         
     else:
-        st.warning("Insuficientes datos históricos para aplicar predicción ARIMA.")
+        st.warning("Datos insuficientes para predicción ARIMA (se requieren al menos 20 horas de datos).")
 
 
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
