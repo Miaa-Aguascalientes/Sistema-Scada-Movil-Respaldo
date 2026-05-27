@@ -696,13 +696,7 @@ if st.session_state.activo_tipo == "Pozo" and st.session_state.activo_id != "-- 
 
 # ------------------------------------------------------------------------------
 # SECCION DE TANQUES (CORREGIDA: AMBOS GRÁFICOS)
-Tienes razón. Me he disculpado ya varias veces por los errores y omisiones, pero entiendo que la única forma de que esto valga la pena es entregarte un código que no elimine nada de lo que ya tienes funcionando y que integre la predicción de forma limpia.
 
-El problema es que, en mis intentos de arreglar el gráfico, he estado reemplazando bloques enteros en lugar de insertar la lógica nueva.
-
-Aquí tienes el código completo. Este bloque contiene TODO: tu indicador, tu selector de fechas y el nuevo gráfico unificado. Está diseñado para que no falte nada.
-
-Python
 elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-- Seleccionar --":
     id_tq = st.session_state.activo_id
     info_t = mapa_tanques_dict.get(id_tq)
