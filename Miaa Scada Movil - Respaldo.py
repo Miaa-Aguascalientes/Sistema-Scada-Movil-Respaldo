@@ -694,9 +694,6 @@ if st.session_state.activo_tipo == "Pozo" and st.session_state.activo_id != "-- 
         )
 
 
-# ------------------------------------------------------------------------------
-# SECCIÓN DE TANQUES (CORREGIDA Y UNIFICADA)
-# ------------------------------------------------------------------------------
 elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-- Seleccionar --":
     id_tq = st.session_state.activo_id
     info_t = mapa_tanques_dict.get(id_tq)
@@ -741,24 +738,29 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
             fig_real.update_layout(template="plotly_dark", height=300, hovermode="x unified", margin=dict(t=30, b=30))
             st.plotly_chart(fig_real, use_container_width=True)
 
-            # 2. GRÁFICO DE PREDICCIÓN (CURVA SUAVE)
-            st.markdown("<h4 style='color:#ffaa00;'>🔮 Predicción de Nivel (Tendencia Curva)</h4>", unsafe_allow_html=True)
+            # 2. GRÁFICO DE PREDICCIÓN (CONECTADO)
+            st.markdown("<h4 style='color:#ffaa00;'>🔮 Predicción de Nivel</h4>", unsafe_allow_html=True)
+            
+            # Ajuste Polinómico para la curva
             df_pred = df_hist.tail(40).copy()
             df_pred['H'] = (df_pred['FECHA'] - df_pred['FECHA'].iloc[0]).dt.total_seconds() / 3600
-            
-            z = np.polyfit(df_pred['H'], df_pred['VALUE'], 2) # Polinomio de grado 2 para curvatura
+            z = np.polyfit(df_pred['H'], df_pred['VALUE'], 2)
             p = np.poly1d(z)
             
+            # Proyección
             ultima_fecha = df_pred['FECHA'].iloc[-1]
             ultima_h = df_pred['H'].iloc[-1]
             futuro_h = np.linspace(ultima_h, ultima_h + 168, 20)
+            prediccion = p(futuro_h)
+            fechas_f = [ultima_fecha + timedelta(hours=float(h - ultima_h)) for h in futuro_h]
             
-            x_plot = [ultima_fecha] + [ultima_fecha + timedelta(hours=float(h - ultima_h)) for h in futuro_h]
-            y_plot = [df_pred['VALUE'].iloc[-1]] + list(p(futuro_h))
+            # Unir puntos para continuidad
+            x_plot = [ultima_fecha] + fechas_f
+            y_plot = [df_pred['VALUE'].iloc[-1]] + list(prediccion)
             
             fig_pred = go.Figure()
             fig_pred.add_trace(go.Scatter(x=x_plot, y=y_plot, name="Predicción", line=dict(color='#ffaa00', width=3, dash='dash')))
-            fig_pred.add_trace(go.Scatter(x=df_pred['FECHA'], y=df_pred['VALUE'], name="Histórico", line=dict(color='#00d4ff', width=2)))
+            fig_pred.add_trace(go.Scatter(x=df_pred['FECHA'], y=df_pred['VALUE'], name="Histórico Reciente", line=dict(color='#00d4ff', width=2)))
             
             fig_pred.update_layout(template="plotly_dark", height=300, hovermode="x unified", margin=dict(t=30, b=30))
             st.plotly_chart(fig_pred, use_container_width=True)
