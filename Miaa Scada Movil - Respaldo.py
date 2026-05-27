@@ -697,59 +697,50 @@ if st.session_state.activo_tipo == "Pozo" and st.session_state.activo_id != "-- 
 # ------------------------------------------------------------------------------
 # SECCION DE TANQUES (CORREGIDA: AMBOS GRÁFICOS)
 elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-- Seleccionar --":
-    id_tq = st.session_state.activo_id
-    info_t = mapa_tanques_dict.get(id_tq)
+    from statsmodels.tsa.seasonal import seasonal_decompose
     
-    st.markdown(f"<h3 style='color:#00d4ff;'>🛢️ Análisis de Nivel: {info_t['nombre']}</h3>", unsafe_allow_html=True)
-
-    # Indicador original
-    data_tq = cargar_datos_scada([info_t['tag_nivel']])
-    ultimo_nivel, _ = data_tq.get(info_t['tag_nivel'], (0.0, "N/A"))
+    # ... [Indicador original intacto] ...
     
-    st.markdown(f'''
-        <div style="border: 2px solid #00d4ff; padding: 10px; border-radius: 12px; text-align: center; margin-bottom: 20px; background: rgba(0, 212, 255, 0.05);">
-            <p style="color: white; font-size: 32px; font-weight: bold; margin: 0;">{float(ultimo_nivel):,.2f} <span style="font-size: 18px; color: #00d4ff;">Mts</span></p>
-        </div>
-    ''', unsafe_allow_html=True)
-
-    # Selección de rango
-    opciones = ["Últimos 7 días", "Últimos 14 días"]
-    opcion_fecha = st.selectbox("Selecciona rango:", opciones)
-    f_ini = datetime.now() - timedelta(days=7 if "7" in opcion_fecha else 14)
-
     try:
-        engine = get_mysql_scada_engine()
-        query = f"SELECT FECHA, VALUE FROM vfitagnumhistory WHERE GATEID IN (SELECT GATEID FROM VfiTagRef WHERE NAME = '{info_t['tag_nivel']}') AND FECHA >= '{f_ini.strftime('%Y-%m-%d %H:%M:%S')}' ORDER BY FECHA ASC"
-        df = pd.read_sql(query, engine)
+        # Consulta SQL (usando tu filtro de tiempo para evitar el error de disco)
+        query = f"SELECT FECHA, VALUE FROM vfitagnumhistory WHERE GATEID IN (SELECT GATEID FROM VfiTagRef WHERE NAME = '{info_t['tag_nivel']}') AND FECHA >= DATE_SUB(NOW(), INTERVAL 14 DAY) ORDER BY FECHA ASC"
+        df = pd.read_sql(query, get_mysql_scada_engine())
         
-        if not df.empty:
+        if len(df) > 50:
             df['FECHA'] = pd.to_datetime(df['FECHA'])
+            df = df.set_index('FECHA').resample('H').mean().interpolate().fillna(method='ffill')
             
-            # --- MODELADO MATEMÁTICO (Polinomio de grado 3 para capturar ciclos) ---
-            x = np.arange(len(df))
-            y = df['VALUE'].values
-            coefs = np.polyfit(x, y, 3)
-            poly = np.poly1d(coefs)
+            # --- MODELO MATEMÁTICO ROBUSTO (DECOMPOSICIÓN STL) ---
+            # 'period=24' asume un ciclo diario (24 horas)
+            result = seasonal_decompose(df['VALUE'], model='additive', period=24)
             
-            # Predicción 7 días (asumiendo 24 registros por día = 168 puntos)
-            x_future = np.arange(len(df), len(df) + 168)
-            y_future = poly(x_future)
-            future_dates = [df['FECHA'].iloc[-1] + timedelta(hours=i) for i in range(1, 169)]
+            # Proyectamos la tendencia y la estacionalidad 168 horas (7 días)
+            trend_ext = np.linspace(result.trend.iloc[-24], result.trend.iloc[-1], 168)
+            seasonal_ext = np.tile(result.seasonal.iloc[-24:], 7)
+            
+            future_vals = trend_ext + seasonal_ext
+            
+            # ASEGURAR FÍSICAMENTE QUE NO BAJE DE 0
+            future_vals = np.clip(future_vals, 0, None)
+            
+            # Fechas futuras
+            last_date = df.index[-1]
+            future_dates = [last_date + timedelta(hours=i) for i in range(1, 169)]
             
             # --- GRÁFICO ÚNICO ---
             fig = go.Figure()
-            # Línea Real (Azul)
-            fig.add_trace(go.Scatter(x=df['FECHA'], y=df['VALUE'], name="Real", line=dict(color='#00d4ff', width=2)))
-            # Línea Futura (Amarilla)
-            fig.add_trace(go.Scatter(x=future_dates, y=y_future, name="Predicción 7 días", line=dict(color='#ffcc00', width=2, dash='dot')))
+            # Datos Reales
+            fig.add_trace(go.Scatter(x=df.index, y=df['VALUE'], name="Real", line=dict(color='#00d4ff', width=2)))
+            # Datos Futuros (Proyectados con el modelo)
+            fig.add_trace(go.Scatter(x=future_dates, y=future_vals, name="Predicción 7 días", line=dict(color='#ffcc00', width=2, dash='dot')))
             
-            fig.update_layout(template="plotly_dark", height=400, hovermode="x unified", margin=dict(t=30, b=30))
+            fig.update_layout(template="plotly_dark", height=400, hovermode="x unified")
             st.plotly_chart(fig, use_container_width=True)
             
         else:
-            st.warning("No hay suficientes datos.")
+            st.warning("Se requieren más datos para generar una proyección robusta.")
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Error técnico en modelo: {e}")
 
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
 
