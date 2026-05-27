@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 import plotly.graph_objects as go
 import time
 import pytz
+import numpy as np
 
 # Configuración de página optimizada para móviles
 st.set_page_config(
