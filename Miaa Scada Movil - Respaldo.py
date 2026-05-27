@@ -715,7 +715,7 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
         </div>
     ''', unsafe_allow_html=True)
     
-    # 2. SELECTOR DE FECHAS (RESTAURADO)
+    # 2. SELECTOR DE FECHAS (INTACTO)
     opciones = ["Últimos 7 días", "Últimos 14 días", "Este Mes", "Personalizado"]
     opcion_fecha = st.selectbox("Selecciona rango:", opciones, index=0)
     hoy_dt = datetime.now()
@@ -727,36 +727,41 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
         rango = st.date_input("Selecciona rango:", [hoy_dt - timedelta(days=7), hoy_dt])
         f_ini = rango[0] if isinstance(rango, list) and len(rango) == 2 else hoy_dt - timedelta(days=7)
 
-    # 3. DATOS Y GRÁFICO (UNIFICADO)
+    # 3. DATOS Y GRÁFICO CON TENDENCIA REAL (NO REPETITIVO)
     try:
         engine = get_mysql_scada_engine()
-        query = f"SELECT FECHA, VALUE FROM vfitagnumhistory WHERE GATEID IN (SELECT GATEID FROM VfiTagRef WHERE NAME = '{info_t['tag_nivel']}') AND FECHA >= '{f_ini.strftime('%Y-%m-%d %H:%M:%S')}' ORDER BY FECHA ASC"
+        # Filtramos por fecha directamente en SQL para evitar errores de disco
+        query = f"""SELECT FECHA, VALUE FROM vfitagnumhistory 
+                    WHERE GATEID IN (SELECT GATEID FROM VfiTagRef WHERE NAME = '{info_t['tag_nivel']}') 
+                    AND FECHA >= '{f_ini.strftime('%Y-%m-%d %H:%M:%S')}' 
+                    ORDER BY FECHA ASC"""
         df = pd.read_sql(query, engine)
         
         if not df.empty:
             df['FECHA'] = pd.to_datetime(df['FECHA'])
             
-            # Perfil horario para predicción
-            df['hora'] = df['FECHA'].dt.hour
-            perfil = df.groupby('hora')['VALUE'].mean()
+            # Cálculo de tendencia lineal simple sobre los últimos 7 días
+            x = np.arange(len(df))
+            y = df['VALUE'].values
+            slope, intercept = np.polyfit(x, y, 1) # Calcula la pendiente real
             
-            # Fechas futuras
-            last_date = df['FECHA'].iloc[-1]
-            future_dates = [last_date + timedelta(hours=i) for i in range(1, 169)]
-            future_vals = [max(0, perfil.get(f.hour, 0)) for f in future_dates]
+            # Predicción: Extrapolamos la tendencia hacia los próximos 7 días
+            future_steps = 168 # 7 días * 24 horas
+            x_future = np.arange(len(df), len(df) + future_steps)
+            y_future = slope * x_future + intercept
+            future_dates = [df['FECHA'].iloc[-1] + timedelta(hours=i) for i in range(1, future_steps + 1)]
             
             # GRÁFICO ÚNICO
             fig = go.Figure()
-            fig.add_trace(go.Scatter(x=df['FECHA'], y=df['VALUE'], name="Real", line=dict(color='#00d4ff', width=2)))
-            fig.add_trace(go.Scatter(x=future_dates, y=future_vals, name="Predicción 7 días", line=dict(color='#ffcc00', width=2, dash='dot')))
+            fig.add_trace(go.Scatter(x=df['FECHA'], y=df['VALUE'], name="Nivel Real", line=dict(color='#00d4ff', width=2)))
+            fig.add_trace(go.Scatter(x=future_dates, y=y_future, name="Tendencia (Predicción)", line=dict(color='#ffcc00', width=2, dash='dot')))
             
             fig.update_layout(template="plotly_dark", height=400, hovermode="x unified", margin=dict(t=30, b=30))
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.warning("No hay datos para este rango.")
+            st.warning("No hay datos suficientes para este rango.")
     except Exception as e:
-        st.error(f"Error técnico: {e}")
-
+        st.error(f"Error cargando el modelo de tendencia: {e}")
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
 
 elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id != "-- Seleccionar --":
