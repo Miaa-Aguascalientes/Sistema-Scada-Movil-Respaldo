@@ -708,7 +708,6 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
     data_tq = cargar_datos_scada([info_t['tag_nivel']])
     ultimo_nivel, fecha_lectura = data_tq.get(info_t['tag_nivel'], (0.0, "N/A"))
     
-    # [Indicador visual... se mantiene igual]
     st.markdown(f'''
         <div style="border: 2px solid #00d4ff; padding: 10px; border-radius: 12px; text-align: center; margin-bottom: 20px; background: rgba(0, 212, 255, 0.05);">
             <p style="color: white; font-size: 12px; margin: 0; font-weight: bold;">Nivel Actual</p>
@@ -723,7 +722,7 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
     hoy_dt = datetime.now()
     if opcion_fecha == "Últimos 7 días": f_ini = hoy_dt - timedelta(days=7)
     elif opcion_fecha == "Últimos 14 días": f_ini = hoy_dt - timedelta(days=14)
-    else: f_ini = hoy_dt.replace(day=1)
+    else: f_ini = hoy_dt.replace(day=1, hour=0, minute=0)
 
     try:
         engine = get_mysql_scada_engine()
@@ -732,19 +731,13 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
             FROM vfitagnumhistory h
             JOIN VfiTagRef r ON h.GATEID = r.GATEID 
             WHERE r.NAME = '{info_t['tag_nivel']}' 
-            AND h.FECHA >= '{f_ini.strftime('%Y-%m-%d')}' 
+            AND h.FECHA >= '{f_ini.strftime('%Y-%m-%d %H:%M:%S')}' 
             ORDER BY h.FECHA ASC
         """
         df = pd.read_sql(query, engine)
-        df['FECHA'] = pd.to_datetime(df['FECHA'])
         
-    if not df.empty:
-
-        # 1. GRÁFICO HISTÓRICO
-        st.markdown("<h4 style='color:#00d4ff;'>📊 Nivel Histórico</h4>", unsafe_allow_html=True)
-        fig1 = go.Figure(go.Scatter(x=df['FECHA'], y=df['VALUE'], line=dict(color='#00ffcc')))
-        fig1.update_layout(template="plotly_dark", height=300, margin=dict(t=20, b=20, l=10, r=10))
-        st.plotly_chart(fig1, use_container_width=True)
+        if not df.empty:
+            df['FECHA'] = pd.to_datetime(df['FECHA'])
         
         # 2. GRÁFICO DE PREDICCIÓN (PROYECCIÓN DE PATRÓN)
         st.markdown("<h4 style='color:#ffcc00;'>🔮 Proyección de Tendencia (Próximos 7 días)</h4>", unsafe_allow_html=True)
