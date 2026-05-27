@@ -694,60 +694,85 @@ if st.session_state.activo_tipo == "Pozo" and st.session_state.activo_id != "-- 
         )
 
 
-# SECCIÓN DE TANQUES - INTEGRACIÓN SIN ALTERAR TU INDEXACIÓN
-# ------------------------------------------------------------------------------
 elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-- Seleccionar --":
-    # ... (Tu código de lectura de variables inicial se mantiene intacto) ...
+    id_tq = st.session_state.activo_id
+    info_t = mapa_tanques_dict.get(id_tq)
     
-    try:
-        engine = get_mysql_scada_engine()
-        query = f"SELECT FECHA, VALUE FROM vfitagnumhistory WHERE GATEID IN (SELECT GATEID FROM VfiTagRef WHERE NAME = '{info_t['tag_nivel']}') AND FECHA BETWEEN '{f_ini}' AND '{hoy_dt}' ORDER BY FECHA ASC"
-        df_hist = pd.read_sql(query, engine)
-        
-        if not df_hist.empty:
-            df_hist['FECHA'] = pd.to_datetime(df_hist['FECHA'])
-            
-            # --- TU GRÁFICO REAL (INTACTO) ---
-            st.markdown("<h4 style='color:#00d4ff;'>📊 Nivel Histórico Real</h4>", unsafe_allow_html=True)
-            fig_real = go.Figure(go.Scatter(x=df_hist['FECHA'], y=df_hist['VALUE'], name="Nivel Real", line=dict(color='#00d4ff', width=2), mode='lines+markers'))
-            fig_real.update_layout(template="plotly_dark", height=300, hovermode="x unified", margin=dict(t=30, b=30))
-            st.plotly_chart(fig_real, use_container_width=True)
+    if info_t:
+        st.markdown(f"<h3 style='color:#00d4ff;'>🛢️  Análisis de Nivel: {info_t['nombre']}</h3>", unsafe_allow_html=True)
 
-            # --- TU GRÁFICO DE PREDICCIÓN (CON TU INDEXACIÓN) ---
-            st.markdown("<h4 style='color:#ffaa00;'>🔮 Predicción de Nivel</h4>", unsafe_allow_html=True)
+        # --- DATOS ---
+        data_tq = cargar_datos_scada([info_t['tag_nivel']])
+        ultimo_nivel, fecha_lectura = data_tq.get(info_t['tag_nivel'], (0.0, "N/A"))
+        
+        # [HUD Visual]
+        st.markdown(f'''
+            <div style="border: 2px solid #00d4ff; padding: 10px; border-radius: 12px; text-align: center; margin-bottom: 20px; background: rgba(0, 212, 255, 0.05);">
+                <p style="color: white; font-size: 12px; margin: 0; font-weight: bold;">Nivel de tanque actual</p>
+                <p style="color: white; font-size: 32px; font-weight: bold; margin: 0;">{float(ultimo_nivel):,.2f} <span style="font-size: 18px; color: #00d4ff;">Mts</span></p>
+            </div>
+        ''', unsafe_allow_html=True)
+
+        # --- RANGO DE FECHAS (TU LÓGICA COMPLETA) ---
+        opciones = ["Hoy", "Ayer", "Últimos 7 días", "Últimos 14 días", "Este Mes", "Personalizado"]
+        opcion_fecha = st.selectbox("Selecciona rango:", opciones, index=2)
+        hoy_dt = datetime.now()
+        
+        if opcion_fecha == "Hoy": f_ini = hoy_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        elif opcion_fecha == "Ayer": f_ini = hoy_dt - timedelta(days=1)
+        elif opcion_fecha == "Últimos 7 días": f_ini = hoy_dt - timedelta(days=7)
+        elif opcion_fecha == "Últimos 14 días": f_ini = hoy_dt - timedelta(days=14)
+        elif opcion_fecha == "Este Mes": f_ini = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        elif opcion_fecha == "Personalizado":
+            rango = st.date_input("Rango:", [hoy_dt - timedelta(days=7), hoy_dt])
+            f_ini = rango[0] if len(rango) == 2 else hoy_dt - timedelta(days=7)
+        else: f_ini = hoy_dt - timedelta(days=7)
+
+        try:
+            engine = get_mysql_scada_engine()
+            query = f"SELECT FECHA, VALUE FROM vfitagnumhistory WHERE GATEID IN (SELECT GATEID FROM VfiTagRef WHERE NAME = '{info_t['tag_nivel']}') AND FECHA BETWEEN '{f_ini}' AND '{hoy_dt}' ORDER BY FECHA ASC"
+            df_hist = pd.read_sql(query, engine)
             
-            # Usamos tu misma indexación de tiempo/valor
-            df_pred = df_hist.tail(40).copy()
-            df_pred['H'] = (df_pred['FECHA'] - df_pred['FECHA'].iloc[0]).dt.total_seconds() / 3600
-            
-            # Regresión para capturar la tendencia cíclica que pediste
-            z = np.polyfit(df_pred['H'], df_pred['VALUE'], 2)
-            p = np.poly1d(z)
-            
-            # Proyectar siguiendo tu lógica
-            ultima_fecha = df_pred['FECHA'].iloc[-1]
-            ultima_h = df_pred['H'].iloc[-1]
-            futuro_h = np.linspace(ultima_h, ultima_h + 168, 20)
-            prediccion = p(futuro_h)
-            
-            # Límite físico de 60 metros (CLAMP)
-            prediccion = np.clip(prediccion, 0, 60)
-            
-            # Fechas basadas en tu delta original
-            fechas_f = [ultima_fecha + timedelta(hours=float(h - ultima_h)) for h in futuro_h]
-            
-            # Gráfico respetando tus series
-            fig_pred = go.Figure()
-            fig_pred.add_trace(go.Scatter(x=[ultima_fecha] + fechas_f, y=[df_pred['VALUE'].iloc[-1]] + list(prediccion), name="Predicción", line=dict(color='#ffaa00', width=3, dash='dash')))
-            fig_pred.add_trace(go.Scatter(x=df_hist['FECHA'], y=df_hist['VALUE'], name="Histórico", line=dict(color='#00d4ff', width=2)))
-            
-            fig_pred.update_layout(template="plotly_dark", height=300, hovermode="x unified", margin=dict(t=30, b=30))
-            st.plotly_chart(fig_pred, use_container_width=True)
-            
-        else:
-            st.warning("Sin datos para este periodo.")
-    except Exception as e:
-        st.error(f"Error: {e}")
+            if not df_hist.empty:
+                df_hist['FECHA'] = pd.to_datetime(df_hist['FECHA'])
+                
+                # 1. GRÁFICO REAL
+                st.markdown("<h4 style='color:#00d4ff;'>📊 Nivel Histórico Real</h4>", unsafe_allow_html=True)
+                fig_real = go.Figure(go.Scatter(x=df_hist['FECHA'], y=df_hist['VALUE'], name="Nivel Real", line=dict(color='#00d4ff', width=2), mode='lines+markers'))
+                fig_real.update_layout(template="plotly_dark", height=300, hovermode="x unified", margin=dict(t=30, b=30))
+                st.plotly_chart(fig_real, use_container_width=True)
+
+                # 2. GRÁFICO PREDICCIÓN (LÓGICA CÍCLICA CON LÍMITE 60M)
+                st.markdown("<h4 style='color:#ffaa00;'>🔮 Predicción de Nivel (Tendencia Cíclica)</h4>", unsafe_allow_html=True)
+                
+                df_pred = df_hist.tail(72).copy() # Histórico reciente para patrón
+                df_pred['H'] = (df_pred['FECHA'] - df_pred['FECHA'].iloc[0]).dt.total_seconds() / 3600
+                
+                # Ajuste polinomial de 2do grado para la curva de tendencia
+                z = np.polyfit(df_pred['H'], df_pred['VALUE'], 2)
+                p = np.poly1d(z)
+                
+                ultima_fecha = df_pred['FECHA'].iloc[-1]
+                ultima_h = df_pred['H'].iloc[-1]
+                futuro_h = np.linspace(ultima_h, ultima_h + 168, 40)
+                
+                # Predicción con CLAMP a 60 metros máximo
+                prediccion = np.clip(p(futuro_h), 0, 60)
+                
+                fechas_f = [ultima_fecha + timedelta(hours=float(h - ultima_h)) for h in futuro_h]
+                
+                fig_pred = go.Figure()
+                fig_pred.add_trace(go.Scatter(x=[ultima_fecha] + fechas_f, y=[df_pred['VALUE'].iloc[-1]] + list(prediccion), name="Predicción", line=dict(color='#ffaa00', width=3, dash='dash')))
+                fig_pred.add_trace(go.Scatter(x=df_pred['FECHA'], y=df_pred['VALUE'], name="Histórico", line=dict(color='#00d4ff', width=2)))
+                
+                fig_pred.update_layout(template="plotly_dark", height=300, hovermode="x unified", margin=dict(t=30, b=30))
+                st.plotly_chart(fig_pred, use_container_width=True)
+            else:
+                st.warning("Sin datos para este periodo.")
+        except Exception as e:
+            st.error(f"Error procesando datos: {e}")
+    else:
+        st.error("No se encontró información del tanque.")
 
 
 
