@@ -701,8 +701,9 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
     id_tq = st.session_state.activo_id
     info_t = mapa_tanques_dict.get(id_tq)
     
-    # --- INDICADOR ---
     st.markdown(f"<h3 style='color:#00d4ff;'>🛢️ Análisis de Nivel: {info_t['nombre']}</h3>", unsafe_allow_html=True)
+    
+    # 1. INDICADOR
     ultimo_nivel, _ = cargar_datos_scada([info_t['tag_nivel']]).get(info_t['tag_nivel'], (0.0, "N/A"))
     st.markdown(f'''
         <div style="border: 2px solid #00d4ff; padding: 10px; border-radius: 12px; text-align: center; margin-bottom: 20px; background: rgba(0, 212, 255, 0.05);">
@@ -710,11 +711,12 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
         </div>
     ''', unsafe_allow_html=True)
     
-    # --- SELECTOR ---
+    # 2. SELECTOR
     opciones = ["Últimos 7 días", "Últimos 14 días"]
     opcion_fecha = st.selectbox("Selecciona rango:", opciones)
     f_ini = datetime.now() - timedelta(days=7 if "7" in opcion_fecha else 14)
 
+    # 3. DATOS Y PROYECCIÓN
     try:
         engine = get_mysql_scada_engine()
         query = f"SELECT FECHA, VALUE FROM vfitagnumhistory WHERE GATEID IN (SELECT GATEID FROM VfiTagRef WHERE NAME = '{info_t['tag_nivel']}') AND FECHA >= '{f_ini.strftime('%Y-%m-%d %H:%M:%S')}' ORDER BY FECHA ASC"
@@ -723,40 +725,32 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
         if not df.empty:
             df['FECHA'] = pd.to_datetime(df['FECHA'])
             
-            # --- LÓGICA DE PROYECCIÓN DE ENVOLVENTE ---
-            # 1. Encontramos los ciclos de llenado exitosos (valor > 5m)
-            ciclos_completos = []
-            for i in range(len(df)-1):
-                if df['VALUE'].iloc[i] < 1 and df['VALUE'].iloc[i+1] > 5:
-                    # Encontramos inicio de llenado, buscamos fin
-                    start = i
-                    end = i + 1
-                    while end < len(df) and df['VALUE'].iloc[end] > 1:
-                        end += 1
-                    ciclos_completos.append(df.iloc[start:end])
+            # --- LÓGICA DE PROYECCIÓN ---
+            # Identificamos el último pico (llenado)
+            ultimo_pico_df = df[df['VALUE'] > 5].tail(1)
             
-            # 2. Tomamos el ciclo más reciente para proyectar
             fig = go.Figure()
+            # Línea Real
             fig.add_trace(go.Scatter(x=df['FECHA'], y=df['VALUE'], name="Real", line=dict(color='#00d4ff', width=2)))
             
-            if ciclos_completos:
-                last_cycle = ciclos_completos[-1]
-                # Duración del ciclo en horas
-                duracion = (last_cycle['FECHA'].iloc[-1] - last_cycle['FECHA'].iloc[0]).total_seconds() / 3600
+            # Proyección forzada (copiamos el último patrón de 24 horas hacia adelante)
+            if not ultimo_pico_df.empty:
+                ref_time = ultimo_pico_df['FECHA'].iloc[0]
+                # Tomamos las últimas 24 horas como patrón
+                patron = df[df['FECHA'] > (df['FECHA'].max() - timedelta(hours=24))]
                 
-                # Proyectamos 2 ciclos más
-                for i in range(1, 3):
-                    next_start = df['FECHA'].iloc[-1] + timedelta(hours=i*duracion)
-                    proj_x = [next_start + (t - last_cycle['FECHA'].iloc[0]) for t in last_cycle['FECHA']]
-                    fig.add_trace(go.Scatter(x=proj_x, y=last_cycle['VALUE'], name=f"Proyección Ciclo {i}", 
-                                             line=dict(color='#ffcc00', width=2, dash='dot')))
+                # Desplazamos el patrón al futuro
+                future_x = [t + timedelta(hours=24) for t in patron['FECHA']]
+                fig.add_trace(go.Scatter(x=future_x, y=patron['VALUE'], name="Predicción (Patrón 24h)", 
+                                         line=dict(color='#ffcc00', width=2, dash='dot')))
             
             fig.update_layout(template="plotly_dark", height=400, hovermode="x unified", margin=dict(t=30, b=30))
             st.plotly_chart(fig, use_container_width=True)
+            
         else:
             st.warning("No hay suficientes datos.")
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Error técnico: {e}")
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
 
 elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id != "-- Seleccionar --":
