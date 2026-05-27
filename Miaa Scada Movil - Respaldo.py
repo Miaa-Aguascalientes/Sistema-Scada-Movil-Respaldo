@@ -693,7 +693,9 @@ if st.session_state.activo_tipo == "Pozo" and st.session_state.activo_id != "-- 
         )
 
 
-# ------------------------------------------------------------------------------ seccion de tanques ------------------------------------------------------------------------
+# ------------------------------------------------------------------------------ 
+# SECCION DE TANQUES (CORREGIDA CON PREDICCIÓN)
+# ------------------------------------------------------------------------------
 
 elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-- Seleccionar --":
     id_tq = st.session_state.activo_id
@@ -706,7 +708,6 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
     ultimo_nivel, fecha_lectura = data_tq.get(info_t['tag_nivel'], (0.0, "N/A"))
     nivel_max = info_t.get('nivel_max', 0.0)
     
-    # Renderizar el indicador visual incluyendo el límite máximo
     st.markdown(f'''
         <div style="border: 2px solid #00d4ff; padding: 10px; border-radius: 12px; text-align: center; margin-bottom: 20px; background: rgba(0, 212, 255, 0.05);">
             <p style="color: white; font-size: 12px; margin: 0; font-weight: bold;">Nivel de tanque actual</p>
@@ -718,90 +719,59 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
         </div>
     ''', unsafe_allow_html=True)
     
-# 1. Definición de opciones
     opciones = ["Hoy", "Ayer", "Últimos 7 días", "Últimos 14 días", "Este Mes", "Último Mes", "Últimos 6 meses", "Personalizado"]
-    opcion_fecha = st.selectbox("Selecciona rango:", opciones, index=2) # Index 0 para empezar en 'Hoy'
+    opcion_fecha = st.selectbox("Selecciona rango:", opciones, index=2)
     
     hoy_dt = datetime.now()
     f_fin = hoy_dt
     
-    # 2. Lógica extendida para calcular fechas
-    if opcion_fecha == "Hoy":
-        f_ini = hoy_dt.replace(hour=0, minute=0, second=0, microsecond=0)
-    elif opcion_fecha == "Ayer":
-        f_ini = hoy_dt - timedelta(days=1)
-    elif opcion_fecha == "Últimos 7 días":
-        f_ini = hoy_dt - timedelta(days=7)
-    elif opcion_fecha == "Últimos 14 días":
-        f_ini = hoy_dt - timedelta(days=14)
-    elif opcion_fecha == "Este Mes":
-        f_ini = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    # [Lógica de fechas se mantiene igual]
+    if opcion_fecha == "Hoy": f_ini = hoy_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif opcion_fecha == "Ayer": f_ini = hoy_dt - timedelta(days=1)
+    elif opcion_fecha == "Últimos 7 días": f_ini = hoy_dt - timedelta(days=7)
+    elif opcion_fecha == "Últimos 14 días": f_ini = hoy_dt - timedelta(days=14)
+    elif opcion_fecha == "Este Mes": f_ini = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     elif opcion_fecha == "Último Mes":
-        # Primer día del mes actual menos un día nos da el mes anterior
         primer_dia_actual = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         f_ini = (primer_dia_actual - timedelta(days=1)).replace(day=1)
         f_fin = primer_dia_actual - timedelta(seconds=1)
-    elif opcion_fecha == "Últimos 6 meses":
-        f_ini = hoy_dt - timedelta(days=180)
+    elif opcion_fecha == "Últimos 6 meses": f_ini = hoy_dt - timedelta(days=180)
     elif opcion_fecha == "Personalizado":
         rango = st.date_input("Selecciona rango:", [hoy_dt - timedelta(days=7), hoy_dt])
-        if len(rango) == 2:
-            f_ini, f_fin = rango[0], rango[1]
-        else:
-            f_ini = hoy_dt - timedelta(days=7)
+        f_ini, f_fin = (rango[0], rango[1]) if len(rango) == 2 else (hoy_dt - timedelta(days=7), hoy_dt)
 
-    # 3. Consulta SQL ajustada con las nuevas variables
     try:
         engine = get_mysql_scada_engine()
-        # Convertimos las fechas a string con formato explícito para evitar errores de interpretación
         f_ini_str = f_ini.strftime('%Y-%m-%d %H:%M:%S')
-        f_fin_str = f_fin.strftime('%Y-%m-%d %H:%M:%S') if isinstance(f_fin, datetime) else f_fin.strftime('%Y-%m-%d %H:%M:%S')
+        f_fin_str = f_fin.strftime('%Y-%m-%d %H:%M:%S')
         
-        query = f"""
-            SELECT h.FECHA, h.VALUE FROM vfitagnumhistory h
-            JOIN VfiTagRef r ON h.GATEID = r.GATEID
-            WHERE r.NAME = '{info_t['tag_nivel']}' 
-            AND h.FECHA BETWEEN '{f_ini_str}' AND '{f_fin_str}'
-            ORDER BY h.FECHA ASC
-        """
+        query = f"SELECT h.FECHA, h.VALUE FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME = '{info_t['tag_nivel']}' AND h.FECHA BETWEEN '{f_ini_str}' AND '{f_fin_str}' ORDER BY h.FECHA ASC"
         df_hist = pd.read_sql(query, engine)
         
         if not df_hist.empty:
             df_hist['FECHA'] = pd.to_datetime(df_hist['FECHA'])
             
+            # Gráfico Principal
             fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=df_hist['FECHA'],
-                y=df_hist['VALUE'],
-                name="Nivel Tq",
-                mode='lines+markers', # Cambio realizado: líneas y puntos
-                line=dict(color='#00ffcc', width=2),
-                fill='tozeroy',
-                fillcolor='rgba(0, 255, 204, 0.1)',
-                hovertemplate="<b>Nivel</b>: %{y:.2f} m<extra></extra>"
-            ))
+            fig.add_trace(go.Scatter(x=df_hist['FECHA'], y=df_hist['VALUE'], name="Nivel Real", mode='lines+markers', line=dict(color='#00ffcc', width=2)))
             
-            fig.update_layout(
-                template="plotly_dark",
-                height=300,
-                margin=dict(t=60, b=80, l=10, r=10),
-                paper_bgcolor='rgba(0,0,0,0)', 
-                plot_bgcolor='rgba(0,0,0,0)',
-                hovermode="x unified",
-                showlegend=True,
-                legend=dict(
-                    orientation="h",
-                    y=1.2,
-                    x=0.5,
-                    xanchor="center",
-                    font=dict(size=10, color='white')
-                ),    
-                xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)', color='white'),
-                yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)', color='white')
-            )
+            # --- INTEGRACIÓN DE PREDICCIÓN (Numpy puro) ---
+            df_hist['ts'] = df_hist['FECHA'].astype(np.int64) // 10**9
+            z = np.polyfit(df_hist['ts'], df_hist['VALUE'], 1)
+            p = np.poly1d(z)
+            
+            # Predecir próximas 6 horas
+            last_ts = df_hist['ts'].iloc[-1]
+            future_ts = np.array([last_ts + (i * 3600) for i in range(1, 7)])
+            prediccion = p(future_ts)
+            future_dates = [pd.to_datetime(ts, unit='s') for ts in future_ts]
+            
+            fig.add_trace(go.Scatter(x=future_dates, y=prediccion, name="Predicción (6h)", mode='lines', line=dict(color='#ffcc00', width=2, dash='dot')))
+            
+            fig.update_layout(template="plotly_dark", height=300, margin=dict(t=30, b=30, l=10, r=10), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', hovermode="x unified")
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.warning("Sin datos para este tanque en el periodo elegido.")
+            st.warning("Sin datos para este periodo.")
     except Exception as e:
         st.error(f"Error cargando tanque: {e}")
 
