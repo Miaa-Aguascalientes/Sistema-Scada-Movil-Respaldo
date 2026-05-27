@@ -702,62 +702,54 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
     
     st.markdown(f"<h3 style='color:#00d4ff;'>🛢️ Análisis de Nivel: {info_t['nombre']}</h3>", unsafe_allow_html=True)
 
-    # --- INDICADOR ORIGINAL ---
+    # Indicador original
     data_tq = cargar_datos_scada([info_t['tag_nivel']])
-    ultimo_nivel, fecha_lectura = data_tq.get(info_t['tag_nivel'], (0.0, "N/A"))
+    ultimo_nivel, _ = data_tq.get(info_t['tag_nivel'], (0.0, "N/A"))
     
     st.markdown(f'''
         <div style="border: 2px solid #00d4ff; padding: 10px; border-radius: 12px; text-align: center; margin-bottom: 20px; background: rgba(0, 212, 255, 0.05);">
-            <p style="color: white; font-size: 12px; margin: 0; font-weight: bold;">Nivel de tanque actual</p>
             <p style="color: white; font-size: 32px; font-weight: bold; margin: 0;">{float(ultimo_nivel):,.2f} <span style="font-size: 18px; color: #00d4ff;">Mts</span></p>
         </div>
     ''', unsafe_allow_html=True)
 
-    # --- TU SELECTOR DE FECHAS (RESTAURADO) ---
-    opciones = ["Últimos 7 días", "Últimos 14 días", "Este Mes", "Personalizado"]
-    opcion_fecha = st.selectbox("Selecciona rango:", opciones, index=0)
-    
-    hoy_dt = datetime.now()
-    if opcion_fecha == "Últimos 7 días": f_ini = hoy_dt - timedelta(days=7)
-    elif opcion_fecha == "Últimos 14 días": f_ini = hoy_dt - timedelta(days=14)
-    elif opcion_fecha == "Este Mes": f_ini = hoy_dt.replace(day=1, hour=0, minute=0)
-    else:
-        rango = st.date_input("Selecciona rango:", [hoy_dt - timedelta(days=7), hoy_dt])
-        f_ini = rango[0] if isinstance(rango, list) and len(rango) == 2 else hoy_dt - timedelta(days=7)
-    
-    f_fin = hoy_dt
+    # Selección de rango
+    opciones = ["Últimos 7 días", "Últimos 14 días"]
+    opcion_fecha = st.selectbox("Selecciona rango:", opciones)
+    f_ini = datetime.now() - timedelta(days=7 if "7" in opcion_fecha else 14)
 
     try:
         engine = get_mysql_scada_engine()
-        query = f"""SELECT h.FECHA, h.VALUE 
-                    FROM vfitagnumhistory h 
-                    JOIN VfiTagRef r ON h.GATEID = r.GATEID 
-                    WHERE r.NAME = '{info_t['tag_nivel']}' 
-                    AND h.FECHA BETWEEN '{f_ini.strftime('%Y-%m-%d %H:%M:%S')}' AND '{f_fin.strftime('%Y-%m-%d %H:%M:%S')}' 
-                    ORDER BY h.FECHA ASC"""
+        query = f"SELECT FECHA, VALUE FROM vfitagnumhistory WHERE GATEID IN (SELECT GATEID FROM VfiTagRef WHERE NAME = '{info_t['tag_nivel']}') AND FECHA >= '{f_ini.strftime('%Y-%m-%d %H:%M:%S')}' ORDER BY FECHA ASC"
         df = pd.read_sql(query, engine)
         
         if not df.empty:
             df['FECHA'] = pd.to_datetime(df['FECHA'])
             
-            # --- GRÁFICO 1: REAL ---
-            st.markdown("#### 📊 Nivel Histórico Real")
-            fig1 = go.Figure(go.Scatter(x=df['FECHA'], y=df['VALUE'], name="Real", line=dict(color='#00ffcc', width=2)))
-            fig1.update_layout(template="plotly_dark", height=300, hovermode="x unified", margin=dict(t=20, b=20))
-            st.plotly_chart(fig1, use_container_width=True)
+            # --- MODELADO MATEMÁTICO (Polinomio de grado 3 para capturar ciclos) ---
+            x = np.arange(len(df))
+            y = df['VALUE'].values
+            coefs = np.polyfit(x, y, 3)
+            poly = np.poly1d(coefs)
             
-            # --- GRÁFICO 2: PROYECCIÓN ---
-            st.markdown("#### 🔮 Proyección (Ciclos Previstos)")
-            df_patron = df.copy()
-            df_patron['FECHA_PROYECTADA'] = df_patron['FECHA'] + timedelta(days=7)
+            # Predicción 7 días (asumiendo 24 registros por día = 168 puntos)
+            x_future = np.arange(len(df), len(df) + 168)
+            y_future = poly(x_future)
+            future_dates = [df['FECHA'].iloc[-1] + timedelta(hours=i) for i in range(1, 169)]
             
-            fig2 = go.Figure(go.Scatter(x=df_patron['FECHA_PROYECTADA'], y=df_patron['VALUE'], name="Proyección", line=dict(color='#ffcc00', width=2, dash='dot')))
-            fig2.update_layout(template="plotly_dark", height=300, hovermode="x unified", margin=dict(t=20, b=20))
-            st.plotly_chart(fig2, use_container_width=True)
+            # --- GRÁFICO ÚNICO ---
+            fig = go.Figure()
+            # Línea Real (Azul)
+            fig.add_trace(go.Scatter(x=df['FECHA'], y=df['VALUE'], name="Real", line=dict(color='#00d4ff', width=2)))
+            # Línea Futura (Amarilla)
+            fig.add_trace(go.Scatter(x=future_dates, y=y_future, name="Predicción 7 días", line=dict(color='#ffcc00', width=2, dash='dot')))
+            
+            fig.update_layout(template="plotly_dark", height=400, hovermode="x unified", margin=dict(t=30, b=30))
+            st.plotly_chart(fig, use_container_width=True)
+            
         else:
-            st.warning("No hay datos para este rango.")
+            st.warning("No hay suficientes datos.")
     except Exception as e:
-        st.error(f"Error técnico: {e}")
+        st.error(f"Error: {e}")
 
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
 
