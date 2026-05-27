@@ -695,7 +695,7 @@ if st.session_state.activo_tipo == "Pozo" and st.session_state.activo_id != "-- 
 
 
 # ------------------------------------------------------------------------------
-# SECCION DE TANQUES (CORREGIDA: SEPARACIÓN DE GRÁFICOS)
+# SECCION DE TANQUES (CORREGIDA: AMBOS GRÁFICOS)
 # ------------------------------------------------------------------------------
 
 elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-- Seleccionar --":
@@ -738,35 +738,42 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
         
         if not df.empty:
             df['FECHA'] = pd.to_datetime(df['FECHA'])
-        
-        # 2. GRÁFICO DE PREDICCIÓN (PROYECCIÓN DE PATRÓN)
-        st.markdown("<h4 style='color:#ffcc00;'>🔮 Proyección de Tendencia (Próximos 7 días)</h4>", unsafe_allow_html=True)
-        
-        # En lugar de polyfit, tomamos los datos de los últimos 7 días y los desplazamos al futuro
-        # Esto mantiene la forma de tus ciclos de llenado/vaciado
-        df_reciente = df.sort_values('FECHA').tail(168) # Últimas 168 horas (7 días)
-        
-        # Creamos los datos futuros sumando 7 días exactos al tiempo de los datos recientes
-        future_dates = df_reciente['FECHA'] + timedelta(days=7)
-        future_values = df_reciente['VALUE']
-        
-        fig2 = go.Figure(go.Scatter(
-            x=future_dates, 
-            y=future_values, 
-            line=dict(color='#ffcc00', dash='dot'),
-            name="Predicción"
-        ))
-        
-        fig2.update_layout(
-            template="plotly_dark", 
-            height=300, 
-            margin=dict(t=20, b=20, l=10, r=10),
-            xaxis=dict(title="Fecha Proyectada"),
-            yaxis=dict(title="Nivel (m)")
-        )
-        st.plotly_chart(fig2, use_container_width=True)
             
-
+            # 1. GRÁFICO DE VALORES REALES
+            st.markdown("<h4 style='color:#00d4ff;'>📊 Nivel Histórico Real</h4>", unsafe_allow_html=True)
+            fig1 = go.Figure(go.Scatter(x=df['FECHA'], y=df['VALUE'], name="Real", line=dict(color='#00ffcc', width=2)))
+            fig1.update_layout(template="plotly_dark", height=300, margin=dict(t=20, b=20, l=10, r=10), hovermode="x unified")
+            st.plotly_chart(fig1, use_container_width=True)
+            
+            # 2. GRÁFICO DE PREDICCIÓN (PROYECCIÓN DE PATRÓN)
+            st.markdown("<h4 style='color:#ffcc00;'>🔮 Proyección de Tendencia (Próximos 7 días)</h4>", unsafe_allow_html=True)
+            
+            # Tomamos la última semana de datos reales para proyectar
+            df_reciente = df.sort_values('FECHA').tail(168)
+            
+            # Desplazamos las fechas 7 días al futuro manteniendo los valores
+            future_dates = df_reciente['FECHA'] + timedelta(days=7)
+            
+            fig2 = go.Figure(go.Scatter(
+                x=future_dates, 
+                y=df_reciente['VALUE'], 
+                name="Predicción",
+                line=dict(color='#ffcc00', width=2, dash='dot')
+            ))
+            
+            fig2.update_layout(
+                template="plotly_dark", 
+                height=300, 
+                margin=dict(t=20, b=20, l=10, r=10),
+                hovermode="x unified",
+                xaxis=dict(title="Fecha Proyectada"),
+                yaxis=dict(title="Nivel (m)")
+            )
+            st.plotly_chart(fig2, use_container_width=True)
+            
+        else:
+            st.warning("No hay suficientes datos históricos para este periodo.")
+            
     except Exception as e:
         st.error(f"Error técnico: {e}")
 
