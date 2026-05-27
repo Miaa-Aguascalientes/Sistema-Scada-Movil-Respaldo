@@ -695,7 +695,7 @@ if st.session_state.activo_tipo == "Pozo" and st.session_state.activo_id != "-- 
 # ------------------------------------------------------------------------------
 # SECCIÓN DE TANQUES (CORREGIDA Y CON PREDICCIÓN)
 # ------------------------------------------------------------------------------
-if st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-- Seleccionar --":
+elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-- Seleccionar --":
     id_tq = st.session_state.activo_id
     info_t = mapa_tanques_dict.get(id_tq)
     
@@ -786,12 +786,7 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
     # ... (Tu código de sectores aquí) ...
     pass
 
-elif:
-    # Vista Default
-    st.markdown("""<div style="text-align: center; margin-top: 40px; padding: 20px; background: rgba(0,212,255,0.02); border: 1px dashed #1f4068; border-radius: 10px;">
-        <p style="color: #00d4ff; font-family: 'Orbitron', sans-serif; font-size: 14px; margin: 0;">
-            Sistema visual Scada. Seleccione una opcion superior para generar el grafico.
-        </p></div>""", unsafe_allow_html=True)
+
 
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
 
