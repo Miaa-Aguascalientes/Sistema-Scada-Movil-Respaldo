@@ -698,13 +698,15 @@ if st.session_state.activo_tipo == "Pozo" and st.session_state.activo_id != "-- 
 # SECCION DE TANQUES (CORREGIDA: AMBOS GRÁFICOS)
 # ------------------------------------------------------------------------------
 
-# --- 1. SECCIÓN DE TANQUES ---
-if st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-- Seleccionar --":
+elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-- Seleccionar --":
+    from statsmodels.tsa.arima.model import ARIMA # IMPORTANTE: Añade esto al inicio del archivo
+    
     id_tq = st.session_state.activo_id
     info_t = mapa_tanques_dict.get(id_tq)
     
     st.markdown(f"<h3 style='color:#00d4ff;'>🛢️ Análisis de Nivel: {info_t['nombre']}</h3>", unsafe_allow_html=True)
 
+    # --- OBTENER DATOS REALES ---
     data_tq = cargar_datos_scada([info_t['tag_nivel']])
     ultimo_nivel, fecha_lectura = data_tq.get(info_t['tag_nivel'], (0.0, "N/A"))
     
@@ -714,38 +716,40 @@ if st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-
             <p style="color: white; font-size: 32px; font-weight: bold; margin: 0;">{float(ultimo_nivel):,.2f} <span style="font-size: 18px; color: #00d4ff;">Mts</span></p>
         </div>
     ''', unsafe_allow_html=True)
+
+    # Rango para alimentar el modelo (mínimo 7 días para tener datos suficientes)
+    df_hist = obtener_historia_7_dias(info_t['tag_nivel'])
     
-    opcion_fecha = st.selectbox("Selecciona rango:", ["Últimos 7 días", "Últimos 14 días", "Este Mes"])
-    hoy_dt = datetime.now()
-    f_ini = (hoy_dt - timedelta(days=7)) if opcion_fecha == "Últimos 7 días" else ((hoy_dt - timedelta(days=14)) if opcion_fecha == "Últimos 14 días" else hoy_dt.replace(day=1))
-
-    try:
-        engine = get_mysql_scada_engine()
-        query = f"SELECT h.FECHA, h.VALUE FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME = '{info_t['tag_nivel']}' AND h.FECHA >= '{f_ini.strftime('%Y-%m-%d %H:%M:%S')}' ORDER BY h.FECHA ASC"
-        df = pd.read_sql(query, engine)
+    if not df_hist.empty and len(df_hist) > 50:
+        # Preprocesamiento: remuestreo a horas para suavizar la serie
+        df_hist = df_hist.set_index('FECHA').resample('H').mean().interpolate().fillna(method='ffill')
         
-        if not df.empty:
-            df['FECHA'] = pd.to_datetime(df['FECHA'])
-            
-            # Gráfico 1: Real
-            fig1 = go.Figure(go.Scatter(x=df['FECHA'], y=df['VALUE'], name="Real", line=dict(color='#00ffcc', width=2)))
-            fig1.update_layout(template="plotly_dark", height=300, margin=dict(t=20, b=20), hovermode="x unified")
-            st.markdown("<h4 style='color:#00d4ff;'>📊 Nivel Histórico Real</h4>", unsafe_allow_html=True)
-            st.plotly_chart(fig1, use_container_width=True)
-            
-            # Gráfico 2: Proyección (Ciclo de 7 días)
-            df_patron = df.sort_values('FECHA').tail(168)
-            future_dates = df_patron['FECHA'] + timedelta(days=7)
-            
-            fig2 = go.Figure(go.Scatter(x=future_dates, y=df_patron['VALUE'], name="Proyección", line=dict(color='#ffcc00', width=2, dash='dot')))
-            fig2.update_layout(template="plotly_dark", height=300, margin=dict(t=20, b=20), hovermode="x unified")
-            st.markdown("<h4 style='color:#ffcc00;'>🔮 Proyección (Ciclos Previstos)</h4>", unsafe_allow_html=True)
-            st.plotly_chart(fig2, use_container_width=True)
-        else:
-            st.warning("No hay suficientes datos.")
-    except Exception as e:
-        st.error(f"Error Tanque: {e}")
+        # 1. GRÁFICO HISTÓRICO REAL
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=df_hist.index, y=df_hist['VALUE'], name="Histórico", line=dict(color='#00d4ff')))
 
+        # 2. MODELADO ARIMA
+        try:
+            # ARIMA(5,1,0) - Ajustable según la frecuencia de tus datos
+            model = ARIMA(df_hist['VALUE'], order=(5, 1, 0))
+            model_fit = model.fit()
+            
+            # Proyección 24 horas (ajusta steps= según lo que necesites)
+            forecast = model_fit.forecast(steps=24)
+            
+            fig.add_trace(go.Scatter(
+                x=forecast.index, y=forecast, 
+                name="Predicción ARIMA", 
+                line=dict(color='#ffcc00', width=2, dash='dot')
+            ))
+        except Exception as e:
+            st.warning("No se pudo calcular la tendencia ARIMA (datos insuficientes o inestables).")
+
+        fig.update_layout(template="plotly_dark", height=300, margin=dict(t=20, b=20), hovermode="x unified")
+        st.plotly_chart(fig, use_container_width=True)
+        
+    else:
+        st.warning("Insuficientes datos históricos para aplicar predicción ARIMA.")
 
 
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
