@@ -730,7 +730,7 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
 
     try:
         engine = get_mysql_scada_engine()
-        # Consulta corregida para eliminar ambigüedad
+        # Consulta limpia y explícita
         query = f"""SELECT h.FECHA, h.VALUE 
                     FROM vfitagnumhistory h 
                     JOIN VfiTagRef r ON h.GATEID = r.GATEID 
@@ -748,30 +748,30 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
             fig1.update_layout(template="plotly_dark", height=300, margin=dict(t=20, b=20), hovermode="x unified")
             st.plotly_chart(fig1, use_container_width=True)
             
-            # --- GRÁFICO 2: PROYECCIÓN 7 DÍAS ---
-            st.markdown("#### 🔮 Proyección (Tendencia 7 días)")
-            if len(df) >= 20:
-                # Calculamos tendencia lineal basada en el historial
-                x = np.arange(len(df))
-                y = df['VALUE'].values
-                coef = np.polyfit(x, y, 1) # Pendiente lineal
-                poly1d_fn = np.poly1d(coef)
-                
-                # Proyectamos 7 días (168 horas)
-                # Asumimos que los datos llegan cada hora; si no, ajusta el paso
-                pasos_futuros = 168 
-                future_x = np.arange(len(df), len(df) + pasos_futuros)
-                future_dates = [df['FECHA'].iloc[-1] + timedelta(hours=i) for i in range(1, pasos_futuros + 1)]
-                future_y = poly1d_fn(future_x)
-                
-                # Evitar negativos
-                future_y = np.maximum(future_y, 0)
-                
-                fig2 = go.Figure(go.Scatter(x=future_dates, y=future_y, name="Predicción 7 días", line=dict(color='#ffcc00', dash='dot')))
-                fig2.update_layout(template="plotly_dark", height=300, margin=dict(t=20, b=20), hovermode="x unified")
-                st.plotly_chart(fig2, use_container_width=True)
-            else:
-                st.warning("Datos insuficientes para proyección.")
+            # --- GRÁFICO 2: PROYECCIÓN (REPETICIÓN DE PATRÓN) ---
+            st.markdown("#### 🔮 Proyección (Ciclos Previstos)")
+            
+            # Cogemos el patrón de los últimos 7 días reales y lo desplazamos 7 días al futuro
+            df_patron = df.copy()
+            df_patron['FECHA_PROYECTADA'] = df_patron['FECHA'] + timedelta(days=7)
+            
+            fig2 = go.Figure(go.Scatter(
+                x=df_patron['FECHA_PROYECTADA'], 
+                y=df_patron['VALUE'], 
+                name="Proyección", 
+                line=dict(color='#ffcc00', width=2, dash='dot')
+            ))
+            
+            fig2.update_layout(
+                template="plotly_dark", 
+                height=300, 
+                margin=dict(t=20, b=20), 
+                hovermode="x unified",
+                xaxis=dict(title="Fecha Proyectada"),
+                yaxis=dict(title="Nivel (m)", range=[0, float(nivel_max) * 1.1])
+            )
+            st.plotly_chart(fig2, use_container_width=True)
+            
         else:
             st.warning("No hay datos para este rango.")
     except Exception as e:
