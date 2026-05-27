@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 import plotly.graph_objects as go
 import time
 import pytz
+import numpy as np
 
 # Configuración de página optimizada para móviles
 st.set_page_config(
@@ -692,16 +693,14 @@ if st.session_state.activo_tipo == "Pozo" and st.session_state.activo_id != "-- 
             unsafe_allow_html=True
         )
 
-# ------------------------------------------------------------------------------
-# SECCIÓN DE TANQUES (CORREGIDA Y CON PREDICCIÓN)
-# ------------------------------------------------------------------------------
 elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-- Seleccionar --":
+    # ------------------- SECCIÓN DE TANQUES -------------------
     id_tq = st.session_state.activo_id
     info_t = mapa_tanques_dict.get(id_tq)
     
     st.markdown(f"<h3 style='color:#00d4ff;'>🛢️  Análisis de Nivel: {info_t['nombre']}</h3>", unsafe_allow_html=True)
 
-    # --- OBTENER DATOS ---
+    # --- OBTENER DATOS SCADA ---
     data_tq = cargar_datos_scada([info_t['tag_nivel']])
     ultimo_nivel, fecha_lectura = data_tq.get(info_t['tag_nivel'], (0.0, "N/A"))
     nivel_max = info_t.get('nivel_max', 0.0)
@@ -710,79 +709,58 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
         <div style="border: 2px solid #00d4ff; padding: 10px; border-radius: 12px; text-align: center; margin-bottom: 20px; background: rgba(0, 212, 255, 0.05);">
             <p style="color: white; font-size: 12px; margin: 0; font-weight: bold;">Nivel de tanque actual</p>
             <p style="color: white; font-size: 32px; font-weight: bold; margin: 0;">{float(ultimo_nivel):,.2f} <span style="font-size: 18px; color: #00d4ff;">Mts</span></p>
-            <p style="color: #cccccc; font-size: 12px; margin-top: 3px;">
-                Nivel de altura del tanque: <span style="color: #00d4ff; font-weight: bold;">{float(nivel_max):,.2f} Mts</span>
-            </p>
             <p style="color: white; font-size: 10px; margin-top: 3px;">Última lectura: {fecha_lectura}</p>
         </div>
     ''', unsafe_allow_html=True)
     
-    # 1. Definición de opciones
     opciones = ["Hoy", "Ayer", "Últimos 7 días", "Últimos 14 días", "Este Mes", "Último Mes", "Últimos 6 meses", "Personalizado"]
     opcion_fecha = st.selectbox("Selecciona rango:", opciones, index=2)
     
     hoy_dt = datetime.now()
     f_fin = hoy_dt
     
-    # 2. Lógica de fechas
     if opcion_fecha == "Hoy": f_ini = hoy_dt.replace(hour=0, minute=0, second=0, microsecond=0)
     elif opcion_fecha == "Ayer": f_ini = hoy_dt - timedelta(days=1)
     elif opcion_fecha == "Últimos 7 días": f_ini = hoy_dt - timedelta(days=7)
     elif opcion_fecha == "Últimos 14 días": f_ini = hoy_dt - timedelta(days=14)
     elif opcion_fecha == "Este Mes": f_ini = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    elif opcion_fecha == "Último Mes":
-        primer_dia_actual = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        f_ini = (primer_dia_actual - timedelta(days=1)).replace(day=1)
-        f_fin = primer_dia_actual - timedelta(seconds=1)
-    elif opcion_fecha == "Últimos 6 meses": f_ini = hoy_dt - timedelta(days=180)
     elif opcion_fecha == "Personalizado":
-        rango = st.date_input("Selecciona rango:", [hoy_dt - timedelta(days=7), hoy_dt])
+        rango = st.date_input("Rango:", [hoy_dt - timedelta(days=7), hoy_dt])
         f_ini, f_fin = (rango[0], rango[1]) if len(rango) == 2 else (hoy_dt - timedelta(days=7), hoy_dt)
+    else: f_ini = hoy_dt - timedelta(days=7)
 
-    # 3. Consulta y Gráficos
     try:
         engine = get_mysql_scada_engine()
-        query = f"SELECT h.FECHA, h.VALUE FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME = '{info_t['tag_nivel']}' AND h.FECHA BETWEEN '{f_ini.strftime('%Y-%m-%d %H:%M:%S')}' AND '{f_fin.strftime('%Y-%m-%d %H:%M:%S')}' ORDER BY h.FECHA ASC"
+        query = f"SELECT FECHA, VALUE FROM vfitagnumhistory WHERE GATEID IN (SELECT GATEID FROM VfiTagRef WHERE NAME = '{info_t['tag_nivel']}') AND FECHA BETWEEN '{f_ini}' AND '{f_fin}' ORDER BY FECHA ASC"
         df_hist = pd.read_sql(query, engine)
         
         if not df_hist.empty:
             df_hist['FECHA'] = pd.to_datetime(df_hist['FECHA'])
             
             # Gráfico Principal
-            fig = go.Figure(go.Scatter(x=df_hist['FECHA'], y=df_hist['VALUE'], name="Nivel Tq", mode='lines+markers', line=dict(color='#00ffcc', width=2), fill='tozeroy', fillcolor='rgba(0, 255, 204, 0.1)'))
-            fig.update_layout(template="plotly_dark", height=300, margin=dict(t=30, b=30, l=10, r=10), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            fig = go.Figure(go.Scatter(x=df_hist['FECHA'], y=df_hist['VALUE'], name="Nivel Real", line=dict(color='#00ffcc', width=2)))
+            fig.update_layout(template="plotly_dark", height=300, margin=dict(t=30, b=30))
             st.plotly_chart(fig, use_container_width=True)
 
-            # --- PROYECCIÓN (ALGORITMO LINEAL DE TENDENCIA) ---
-            st.markdown("<h4 style='color:#00d4ff; margin-top:30px;'>🔮 Proyección de Nivel (7 días)</h4>", unsafe_allow_html=True)
+            # Algoritmo de Predicción (Regresión Lineal)
+            st.markdown("<h4 style='color:#ffaa00;'>🔮 Predicción de Tendencia</h4>", unsafe_allow_html=True)
+            df_pred = df_hist.tail(30).copy()
+            df_pred['H'] = (df_pred['FECHA'] - df_pred['FECHA'].iloc[0]).dt.total_seconds() / 3600
+            m, b = np.polyfit(df_pred['H'], df_pred['VALUE'], 1)
             
-            # Usamos los últimos datos del periodo cargado para calcular la tendencia
-            df_tend = df_hist.tail(20) # Tomamos los últimos 20 puntos para ser más precisos
-            if len(df_tend) > 5:
-                # Cálculo de pendiente (delta valor / delta tiempo)
-                x_val = (df_tend['FECHA'] - df_tend['FECHA'].iloc[0]).dt.total_seconds() / 3600
-                y_val = df_tend['VALUE']
-                # Regresión lineal simple
-                n = len(x_val)
-                pendiente = (n * (x_val * y_val).sum() - x_val.sum() * y_val.sum()) / (n * (x_val**2).sum() - x_val.sum()**2)
-                
-                ultimo_v = float(df_hist['VALUE'].iloc[-1])
-                ultima_f = df_hist['FECHA'].iloc[-1]
-                
-                futuro_f = [ultima_f + timedelta(hours=i*6) for i in range(1, 29)]
-                futuro_v = [max(0, ultimo_v + (pendiente * (i*6))) for i in range(1, 29)]
-                
-                fig_pred = go.Figure()
-                fig_pred.add_trace(go.Scatter(x=df_hist['FECHA'].tail(50), y=df_hist['VALUE'].tail(50), name="Nivel Real", line=dict(color='#00d4ff', width=2)))
-                fig_pred.add_trace(go.Scatter(x=futuro_f, y=futuro_v, name="Proyección", line=dict(color='#ffaa00', width=2, dash='dash')))
-                fig_pred.update_layout(template="plotly_dark", height=300, margin=dict(t=30, b=30), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig_pred, use_container_width=True)
-            else:
-                st.info("Datos insuficientes para proyectar tendencia.")
+            futuro_h = np.linspace(df_pred['H'].iloc[-1], df_pred['H'].iloc[-1] + 168, 20)
+            prediccion = m * futuro_h + b
+            fechas_f = [df_pred['FECHA'].iloc[-1] + timedelta(hours=float(h - df_pred['H'].iloc[-1])) for h in futuro_h]
+            
+            fig_p = go.Figure()
+            fig_p.add_trace(go.Scatter(x=df_hist['FECHA'].tail(50), y=df_hist['VALUE'].tail(50), name="Real"))
+            fig_p.add_trace(go.Scatter(x=fechas_f, y=prediccion, name="Predicción", line=dict(dash='dash', color='#ffaa00')))
+            fig_p.update_layout(template="plotly_dark", height=300)
+            st.plotly_chart(fig_p, use_container_width=True)
         else:
-            st.warning("Sin datos para este periodo.")
+            st.warning("No hay datos históricos para este periodo.")
     except Exception as e:
-        st.error(f"Error cargando proyección: {e}")
+        st.error(f"Error: {e}")
 
 
 
