@@ -9,3 +9,8 @@ plotly
 streamlit-autorefresh
 bcrypt
 shapely
+matplotlib
+SQLAlchemy
+kaleido==0.2.1
+pytz
+scipy
