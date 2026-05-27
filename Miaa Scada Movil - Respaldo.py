@@ -693,17 +693,18 @@ if st.session_state.activo_tipo == "Pozo" and st.session_state.activo_id != "-- 
             unsafe_allow_html=True
         )
 
+# ------------------------------------------------------------------------------
+# SECCIÓN DE TANQUES - ESTRUCTURA UNIFICADA Y PREDICCIÓN CONTINUA
+# ------------------------------------------------------------------------------
 elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-- Seleccionar --":
-    # ------------------- SECCIÓN DE TANQUES -------------------
     id_tq = st.session_state.activo_id
     info_t = mapa_tanques_dict.get(id_tq)
     
     st.markdown(f"<h3 style='color:#00d4ff;'>🛢️  Análisis de Nivel: {info_t['nombre']}</h3>", unsafe_allow_html=True)
 
-    # --- OBTENER DATOS SCADA ---
+    # --- OBTENER DATOS ---
     data_tq = cargar_datos_scada([info_t['tag_nivel']])
     ultimo_nivel, fecha_lectura = data_tq.get(info_t['tag_nivel'], (0.0, "N/A"))
-    nivel_max = info_t.get('nivel_max', 0.0)
     
     st.markdown(f'''
         <div style="border: 2px solid #00d4ff; padding: 10px; border-radius: 12px; text-align: center; margin-bottom: 20px; background: rgba(0, 212, 255, 0.05);">
@@ -713,11 +714,10 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
         </div>
     ''', unsafe_allow_html=True)
     
-    opciones = ["Hoy", "Ayer", "Últimos 7 días", "Últimos 14 días", "Este Mes", "Último Mes", "Últimos 6 meses", "Personalizado"]
+    # Selección de rango
+    opciones = ["Hoy", "Ayer", "Últimos 7 días", "Últimos 14 días", "Este Mes", "Personalizado"]
     opcion_fecha = st.selectbox("Selecciona rango:", opciones, index=2)
-    
     hoy_dt = datetime.now()
-    f_fin = hoy_dt
     
     if opcion_fecha == "Hoy": f_ini = hoy_dt.replace(hour=0, minute=0, second=0, microsecond=0)
     elif opcion_fecha == "Ayer": f_ini = hoy_dt - timedelta(days=1)
@@ -726,58 +726,42 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
     elif opcion_fecha == "Este Mes": f_ini = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     elif opcion_fecha == "Personalizado":
         rango = st.date_input("Rango:", [hoy_dt - timedelta(days=7), hoy_dt])
-        f_ini, f_fin = (rango[0], rango[1]) if len(rango) == 2 else (hoy_dt - timedelta(days=7), hoy_dt)
+        f_ini = rango[0] if len(rango) == 2 else hoy_dt - timedelta(days=7)
     else: f_ini = hoy_dt - timedelta(days=7)
 
     try:
         engine = get_mysql_scada_engine()
-        query = f"SELECT FECHA, VALUE FROM vfitagnumhistory WHERE GATEID IN (SELECT GATEID FROM VfiTagRef WHERE NAME = '{info_t['tag_nivel']}') AND FECHA BETWEEN '{f_ini}' AND '{f_fin}' ORDER BY FECHA ASC"
+        query = f"SELECT FECHA, VALUE FROM vfitagnumhistory WHERE GATEID IN (SELECT GATEID FROM VfiTagRef WHERE NAME = '{info_t['tag_nivel']}') AND FECHA BETWEEN '{f_ini}' AND '{hoy_dt}' ORDER BY FECHA ASC"
         df_hist = pd.read_sql(query, engine)
         
         if not df_hist.empty:
             df_hist['FECHA'] = pd.to_datetime(df_hist['FECHA'])
             
-            # Gráfico Principal
-            fig = go.Figure(go.Scatter(x=df_hist['FECHA'], y=df_hist['VALUE'], name="Nivel Real", line=dict(color='#00ffcc', width=2)))
-            fig.update_layout(template="plotly_dark", height=300, margin=dict(t=30, b=30))
+            # --- CÁLCULO DE PREDICCIÓN (REGRESIÓN LINEAL) ---
+            df_pred = df_hist.tail(30).copy()
+            df_pred['H'] = (df_pred['FECHA'] - df_pred['FECHA'].iloc[0]).dt.total_seconds() / 3600
+            m, b = np.polyfit(df_pred['H'], df_pred['VALUE'], 1)
+            
+            # Generar puntos futuros
+            futuro_h = np.linspace(df_pred['H'].iloc[-1], df_pred['H'].iloc[-1] + 168, 20)
+            prediccion = m * futuro_h + b
+            fechas_f = [df_pred['FECHA'].iloc[-1] + timedelta(hours=float(h - df_pred['H'].iloc[-1])) for h in futuro_h]
+            
+            # --- GRAFICAR CONTINUO ---
+            fig = go.Figure()
+            # Histórico
+            fig.add_trace(go.Scatter(x=df_hist['FECHA'], y=df_hist['VALUE'], name="Histórico", line=dict(color='#00d4ff', width=2)))
+            # Predicción (Unida al último punto)
+            fig.add_trace(go.Scatter(x=[df_hist['FECHA'].iloc[-1]] + fechas_f, 
+                                     y=[df_hist['VALUE'].iloc[-1]] + list(prediccion), 
+                                     name="Predicción", line=dict(color='#ffaa00', width=2, dash='dash')))
+            
+            fig.update_layout(template="plotly_dark", height=350, margin=dict(t=30, b=30), hovermode="x unified")
             st.plotly_chart(fig, use_container_width=True)
-
-            # Algoritmo de Predicción (Regresión Lineal)
-            st.markdown("<h4 style='color:#ffaa00;'>🔮 Predicción (Suavizado Exponencial)</h4>", unsafe_allow_html=True)
-            
-            # Usamos los últimos datos disponibles
-            df_pred = df_hist.tail(50).copy()
-            y = df_pred['VALUE'].values
-            
-            # Algoritmo: Simple Exponential Smoothing
-            # alpha controla cuánto peso damos a los datos recientes (0.1 a 0.9)
-            alpha = 0.3
-            f = [y[0]]
-            for i in range(1, len(y)):
-                f.append(alpha * y[i-1] + (1 - alpha) * f[i-1])
-            
-            # Predecir los siguientes 20 periodos manteniendo la última tendencia suavizada
-            trend = f[-1] - f[-2]
-            prediccion = [f[-1] + (i * trend) for i in range(1, 21)]
-            
-            # Crear fechas futuras
-            ultima_fecha = df_pred['FECHA'].iloc[-1]
-            fechas_f = [ultima_fecha + timedelta(hours=i*2) for i in range(1, 21)]
-            
-            # Graficar
-            fig_pred = go.Figure()
-            fig_pred.add_trace(go.Scatter(x=df_hist['FECHA'].tail(50), y=df_hist['VALUE'].tail(50), 
-                                          name="Nivel Histórico", line=dict(color='#00d4ff', width=2)))
-            fig_pred.add_trace(go.Scatter(x=fechas_f, y=prediccion, 
-                                          name="Predicción (Suavizado)", 
-                                          line=dict(color='#ffaa00', width=3, dash='dash')))
-            
-            fig_pred.update_layout(template="plotly_dark", height=300, margin=dict(t=30, b=30))
-            st.plotly_chart(fig_pred, use_container_width=True)
         else:
-            st.warning("No hay datos históricos para este periodo.")
+            st.warning("Sin datos para este periodo.")
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Error cargando datos: {e}")
 
 
 
