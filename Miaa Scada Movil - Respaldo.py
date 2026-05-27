@@ -723,37 +723,33 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
         if not df.empty:
             df['FECHA'] = pd.to_datetime(df['FECHA'])
             
-            # --- LÓGICA DE PROYECCIÓN DE EVENTOS ---
-            # 1. Identificar ciclos de llenado (cuando supera el 80% de su máximo histórico observado)
-            max_val = df['VALUE'].max()
-            umbral = max_val * 0.8
-            picos = df[df['VALUE'] >= umbral]
+            # --- LÓGICA DE PROYECCIÓN DE ENVOLVENTE ---
+            # 1. Encontramos los ciclos de llenado exitosos (valor > 5m)
+            ciclos_completos = []
+            for i in range(len(df)-1):
+                if df['VALUE'].iloc[i] < 1 and df['VALUE'].iloc[i+1] > 5:
+                    # Encontramos inicio de llenado, buscamos fin
+                    start = i
+                    end = i + 1
+                    while end < len(df) and df['VALUE'].iloc[end] > 1:
+                        end += 1
+                    ciclos_completos.append(df.iloc[start:end])
             
-            # 2. Calcular frecuencia promedio entre llenados grandes
-            if len(picos) > 1:
-                frecuencia = picos['FECHA'].diff().mean()
-                
-                # 3. Proyectar: Tomar el perfil de los últimos 2 llenados y repetirlos
-                # Esto garantiza que la amplitud (los 6+ metros) se mantenga
-                last_peak_time = picos['FECHA'].iloc[-1]
-                
-                # Generar eventos futuros
-                future_events = []
-                for i in range(1, 4): # Proyectamos 3 eventos futuros
-                    t_futuro = last_peak_time + (frecuencia * i)
-                    if t_futuro < (datetime.now() + timedelta(days=7)):
-                        future_events.append({'FECHA': t_futuro, 'VALUE': max_val})
-                
-                df_future = pd.DataFrame(future_events)
-            
-            # --- GRÁFICO ---
+            # 2. Tomamos el ciclo más reciente para proyectar
             fig = go.Figure()
             fig.add_trace(go.Scatter(x=df['FECHA'], y=df['VALUE'], name="Real", line=dict(color='#00d4ff', width=2)))
             
-            if not df_future.empty:
-                fig.add_trace(go.Scatter(x=df_future['FECHA'], y=df_future['VALUE'], name="Predicción (Próximos Llenados)", 
-                                         mode='markers+lines', line=dict(color='#ffcc00', width=2, dash='dot'),
-                                         marker=dict(size=8)))
+            if ciclos_completos:
+                last_cycle = ciclos_completos[-1]
+                # Duración del ciclo en horas
+                duracion = (last_cycle['FECHA'].iloc[-1] - last_cycle['FECHA'].iloc[0]).total_seconds() / 3600
+                
+                # Proyectamos 2 ciclos más
+                for i in range(1, 3):
+                    next_start = df['FECHA'].iloc[-1] + timedelta(hours=i*duracion)
+                    proj_x = [next_start + (t - last_cycle['FECHA'].iloc[0]) for t in last_cycle['FECHA']]
+                    fig.add_trace(go.Scatter(x=proj_x, y=last_cycle['VALUE'], name=f"Proyección Ciclo {i}", 
+                                             line=dict(color='#ffcc00', width=2, dash='dot')))
             
             fig.update_layout(template="plotly_dark", height=400, hovermode="x unified", margin=dict(t=30, b=30))
             st.plotly_chart(fig, use_container_width=True)
