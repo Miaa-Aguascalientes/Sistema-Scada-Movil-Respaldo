@@ -740,29 +740,39 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
         
         if not df.empty:
             # 1. GRÁFICO HISTÓRICO
-            st.markdown("<h4 style='color:#00d4ff;'>📊 Nivel Histórico</h4>", unsafe_allow_html=True)
-            fig1 = go.Figure(go.Scatter(x=df['FECHA'], y=df['VALUE'], line=dict(color='#00ffcc')))
-            fig1.update_layout(template="plotly_dark", height=300, margin=dict(t=20, b=20, l=10, r=10))
-            st.plotly_chart(fig1, use_container_width=True)
-            
-            # 2. GRÁFICO DE PREDICCIÓN (7 DÍAS)
-            st.markdown("<h4 style='color:#ffcc00;'>🔮 Predicción (Próximos 7 días)</h4>", unsafe_allow_html=True)
-            
-            # Cálculo de tendencia con Numpy
-            x = (df['FECHA'].astype(np.int64) // 10**9).values
-            y = df['VALUE'].values
-            z = np.polyfit(x, y, 1) # Regresión lineal
-            p = np.poly1d(z)
-            
-            # Crear eje X para 7 días hacia adelante
-            last_ts = x[-1]
-            future_x = np.array([last_ts + (i * 3600 * 24) for i in range(1, 8)])
-            future_y = p(future_x)
-            future_dates = [pd.to_datetime(ts, unit='s') for ts in future_x]
-            
-            fig2 = go.Figure(go.Scatter(x=future_dates, y=future_y, line=dict(color='#ffcc00', dash='dot')))
-            fig2.update_layout(template="plotly_dark", height=300, margin=dict(t=20, b=20, l=10, r=10))
-            st.plotly_chart(fig2, use_container_width=True)
+            if not df.empty:
+        # 1. GRÁFICO HISTÓRICO
+        st.markdown("<h4 style='color:#00d4ff;'>📊 Nivel Histórico</h4>", unsafe_allow_html=True)
+        fig1 = go.Figure(go.Scatter(x=df['FECHA'], y=df['VALUE'], line=dict(color='#00ffcc')))
+        fig1.update_layout(template="plotly_dark", height=300, margin=dict(t=20, b=20, l=10, r=10))
+        st.plotly_chart(fig1, use_container_width=True)
+        
+        # 2. GRÁFICO DE PREDICCIÓN (PROYECCIÓN DE PATRÓN)
+        st.markdown("<h4 style='color:#ffcc00;'>🔮 Proyección de Tendencia (Próximos 7 días)</h4>", unsafe_allow_html=True)
+        
+        # En lugar de polyfit, tomamos los datos de los últimos 7 días y los desplazamos al futuro
+        # Esto mantiene la forma de tus ciclos de llenado/vaciado
+        df_reciente = df.sort_values('FECHA').tail(168) # Últimas 168 horas (7 días)
+        
+        # Creamos los datos futuros sumando 7 días exactos al tiempo de los datos recientes
+        future_dates = df_reciente['FECHA'] + timedelta(days=7)
+        future_values = df_reciente['VALUE']
+        
+        fig2 = go.Figure(go.Scatter(
+            x=future_dates, 
+            y=future_values, 
+            line=dict(color='#ffcc00', dash='dot'),
+            name="Predicción"
+        ))
+        
+        fig2.update_layout(
+            template="plotly_dark", 
+            height=300, 
+            margin=dict(t=20, b=20, l=10, r=10),
+            xaxis=dict(title="Fecha Proyectada"),
+            yaxis=dict(title="Nivel (m)")
+        )
+        st.plotly_chart(fig2, use_container_width=True)
             
         else:
             st.warning("No hay suficientes datos históricos para calcular tendencia.")
