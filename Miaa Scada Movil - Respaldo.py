@@ -693,13 +693,7 @@ if st.session_state.activo_tipo == "Pozo" and st.session_state.activo_id != "-- 
             unsafe_allow_html=True
         )
 
-El código que has compartido tiene un problema estructural crítico: la jerarquía de los elif y el else final están desalineados, lo cual es la causa probable de que tu Vista Default no funcione o que el código se corte.
 
-Además, he corregido la lógica de predicción para que no sea una línea recta, sino una curva de segundo grado que mantiene la continuidad con el histórico y conserva todas tus funciones interactivas (hovermode, zoom, etc.).
-
-Aquí tienes el archivo completo y unificado. Copia esto y reemplaza todo lo que tengas desde elif st.session_state.activo_tipo == "Tanque"... hasta el final del archivo:
-
-Python
 # ------------------------------------------------------------------------------
 # SECCIÓN DE TANQUES (CORREGIDA Y UNIFICADA)
 # ------------------------------------------------------------------------------
