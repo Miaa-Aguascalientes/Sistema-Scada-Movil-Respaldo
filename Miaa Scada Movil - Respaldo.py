@@ -748,28 +748,45 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
             # 2. GRÁFICO DE PREDICCIÓN (PROYECCIÓN DE PATRÓN)
             st.markdown("<h4 style='color:#ffcc00;'>🔮 Proyección de Tendencia (Próximos 7 días)</h4>", unsafe_allow_html=True)
             
-            # Tomamos la última semana de datos reales para proyectar
-            df_reciente = df.sort_values('FECHA').tail(168)
+            x = (df_hist['FECHA'] - df_hist['FECHA'].min()).dt.total_seconds() / 86400
+            y = df_hist['VALUE'].values
             
-            # Desplazamos las fechas 7 días al futuro manteniendo los valores
-            future_dates = df_reciente['FECHA'] + timedelta(days=7)
+            # Ajustamos una curva polinómica de grado 3 (bueno para ciclos de llenado)
+            coefs = np.polyfit(x, y, 3)
+            poly_func = np.poly1d(coefs)
             
-            fig2 = go.Figure(go.Scatter(
-                x=future_dates, 
-                y=df_reciente['VALUE'], 
-                name="Predicción",
+            # Creamos fechas para los próximos 7 días
+            last_date = df_hist['FECHA'].max()
+            future_x = np.linspace(x.max(), x.max() + 7, 100)
+            future_dates = [last_date + timedelta(days=float(i - x.max())) for i in future_x]
+            future_y = poly_func(future_x)
+            
+            # Aseguramos que no haya valores negativos (un tanque no baja de 0m)
+            future_y = np.maximum(future_y, 0)
+            
+            # --- GRÁFICO ---
+            fig = go.Figure()
+            
+            # Datos reales
+            fig.add_trace(go.Scatter(
+                x=df_hist['FECHA'], y=df_hist['VALUE'],
+                name="Nivel Real", line=dict(color='#00ffcc', width=2)
+            ))
+            
+            # Predicción
+            fig.add_trace(go.Scatter(
+                x=future_dates, y=future_y,
+                name="Predicción (Tendencia)", 
                 line=dict(color='#ffcc00', width=2, dash='dot')
             ))
             
-            fig2.update_layout(
-                template="plotly_dark", 
-                height=300, 
-                margin=dict(t=20, b=20, l=10, r=10),
-                hovermode="x unified",
-                xaxis=dict(title="Fecha Proyectada"),
-                yaxis=dict(title="Nivel (m)")
+            fig.update_layout(
+                template="plotly_dark",
+                height=300,
+                margin=dict(t=60, b=80, l=10, r=10),
+                hovermode="x unified"
             )
-            st.plotly_chart(fig2, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True)
             
         else:
             st.warning("No hay suficientes datos históricos para este periodo.")
