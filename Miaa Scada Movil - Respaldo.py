@@ -694,7 +694,7 @@ if st.session_state.activo_tipo == "Pozo" and st.session_state.activo_id != "-- 
         )
 
 # ------------------------------------------------------------------------------
-# SECCIÓN DE TANQUES - ESTRUCTURA UNIFICADA Y PREDICCIÓN CONTINUA
+# SECCIÓN DE TANQUES - RECONSTRUCCIÓN COMPLETA
 # ------------------------------------------------------------------------------
 elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-- Seleccionar --":
     id_tq = st.session_state.activo_id
@@ -702,19 +702,19 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
     
     st.markdown(f"<h3 style='color:#00d4ff;'>🛢️  Análisis de Nivel: {info_t['nombre']}</h3>", unsafe_allow_html=True)
 
-    # --- OBTENER DATOS ---
+    # --- DATOS ---
     data_tq = cargar_datos_scada([info_t['tag_nivel']])
     ultimo_nivel, fecha_lectura = data_tq.get(info_t['tag_nivel'], (0.0, "N/A"))
     
+    # [HUD Visual]
     st.markdown(f'''
         <div style="border: 2px solid #00d4ff; padding: 10px; border-radius: 12px; text-align: center; margin-bottom: 20px; background: rgba(0, 212, 255, 0.05);">
             <p style="color: white; font-size: 12px; margin: 0; font-weight: bold;">Nivel de tanque actual</p>
             <p style="color: white; font-size: 32px; font-weight: bold; margin: 0;">{float(ultimo_nivel):,.2f} <span style="font-size: 18px; color: #00d4ff;">Mts</span></p>
-            <p style="color: white; font-size: 10px; margin-top: 3px;">Última lectura: {fecha_lectura}</p>
         </div>
     ''', unsafe_allow_html=True)
-    
-    # Selección de rango
+
+    # --- RANGO DE FECHAS ---
     opciones = ["Hoy", "Ayer", "Últimos 7 días", "Últimos 14 días", "Este Mes", "Personalizado"]
     opcion_fecha = st.selectbox("Selecciona rango:", opciones, index=2)
     hoy_dt = datetime.now()
@@ -722,8 +722,6 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
     if opcion_fecha == "Hoy": f_ini = hoy_dt.replace(hour=0, minute=0, second=0, microsecond=0)
     elif opcion_fecha == "Ayer": f_ini = hoy_dt - timedelta(days=1)
     elif opcion_fecha == "Últimos 7 días": f_ini = hoy_dt - timedelta(days=7)
-    elif opcion_fecha == "Últimos 14 días": f_ini = hoy_dt - timedelta(days=14)
-    elif opcion_fecha == "Este Mes": f_ini = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     elif opcion_fecha == "Personalizado":
         rango = st.date_input("Rango:", [hoy_dt - timedelta(days=7), hoy_dt])
         f_ini = rango[0] if len(rango) == 2 else hoy_dt - timedelta(days=7)
@@ -737,32 +735,44 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
         if not df_hist.empty:
             df_hist['FECHA'] = pd.to_datetime(df_hist['FECHA'])
             
-            # --- CÁLCULO DE PREDICCIÓN (REGRESIÓN LINEAL) ---
+            # 1. GRÁFICO REAL (INTACTO)
+            st.markdown("<h4 style='color:#00d4ff;'>📊 Nivel Histórico Real</h4>", unsafe_allow_html=True)
+            fig_real = go.Figure(go.Scatter(x=df_hist['FECHA'], y=df_hist['VALUE'], name="Nivel Real", line=dict(color='#00d4ff', width=2), mode='lines+markers'))
+            fig_real.update_layout(template="plotly_dark", height=300, hovermode="x unified", margin=dict(t=30, b=30))
+            st.plotly_chart(fig_real, use_container_width=True)
+
+            # 2. GRÁFICO DE PREDICCIÓN (EXCLUSIVO)
+            st.markdown("<h4 style='color:#ffaa00;'>🔮 Predicción de Nivel (Tendencia)</h4>", unsafe_allow_html=True)
+            
+            # Algoritmo de predicción
             df_pred = df_hist.tail(30).copy()
             df_pred['H'] = (df_pred['FECHA'] - df_pred['FECHA'].iloc[0]).dt.total_seconds() / 3600
             m, b = np.polyfit(df_pred['H'], df_pred['VALUE'], 1)
             
-            # Generar puntos futuros
             futuro_h = np.linspace(df_pred['H'].iloc[-1], df_pred['H'].iloc[-1] + 168, 20)
             prediccion = m * futuro_h + b
             fechas_f = [df_pred['FECHA'].iloc[-1] + timedelta(hours=float(h - df_pred['H'].iloc[-1])) for h in futuro_h]
             
-            # --- GRAFICAR CONTINUO ---
-            fig = go.Figure()
-            # Histórico
-            fig.add_trace(go.Scatter(x=df_hist['FECHA'], y=df_hist['VALUE'], name="Histórico", line=dict(color='#00d4ff', width=2)))
-            # Predicción (Unida al último punto)
-            fig.add_trace(go.Scatter(x=[df_hist['FECHA'].iloc[-1]] + fechas_f, 
-                                     y=[df_hist['VALUE'].iloc[-1]] + list(prediccion), 
-                                     name="Predicción", line=dict(color='#ffaa00', width=2, dash='dash')))
+            fig_pred = go.Figure(go.Scatter(
+                x=fechas_f, y=prediccion, 
+                name="Tendencia Predicha", 
+                line=dict(color='#ffaa00', width=3, dash='dash')
+            ))
             
-            fig.update_layout(template="plotly_dark", height=350, margin=dict(t=30, b=30), hovermode="x unified")
-            st.plotly_chart(fig, use_container_width=True)
+            fig_pred.update_layout(
+                template="plotly_dark", 
+                height=300, 
+                hovermode="x unified",
+                xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)'),
+                yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)'),
+                margin=dict(t=30, b=30)
+            )
+            st.plotly_chart(fig_pred, use_container_width=True)
+            
         else:
             st.warning("Sin datos para este periodo.")
     except Exception as e:
-        st.error(f"Error cargando datos: {e}")
-
+        st.error(f"Error: {e}")
 
 
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
