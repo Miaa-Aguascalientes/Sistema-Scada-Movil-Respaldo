@@ -737,43 +737,53 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
             
             # 1. GRÁFICO REAL (INTACTO)
             st.markdown("<h4 style='color:#00d4ff;'>📊 Nivel Histórico Real</h4>", unsafe_allow_html=True)
-            fig_real = go.Figure(go.Scatter(x=df_hist['FECHA'], y=df_hist['VALUE'], name="Nivel Real", line=dict(color='#00d4ff', width=2), mode='lines+markers'))
-            fig_real.update_layout(template="plotly_dark", height=300, hovermode="x unified", margin=dict(t=30, b=30))
-            st.plotly_chart(fig_real, use_container_width=True)
-
-            # 2. GRÁFICO DE PREDICCIÓN (EXCLUSIVO)
-            st.markdown("<h4 style='color:#ffaa00;'>🔮 Predicción de Nivel (Tendencia)</h4>", unsafe_allow_html=True)
+# 2. GRÁFICO DE PREDICCIÓN (CURVADO Y CONECTADO)
+            st.markdown("<h4 style='color:#ffaa00;'>🔮 Predicción de Nivel</h4>", unsafe_allow_html=True)
             
-            # Algoritmo de predicción
-            df_pred = df_hist.tail(30).copy()
+            # --- INDEXACIÓN CORRECTA ---
+            # Usamos los últimos 40 puntos para que la curva tenga contexto
+            df_pred = df_hist.tail(40).copy()
             df_pred['H'] = (df_pred['FECHA'] - df_pred['FECHA'].iloc[0]).dt.total_seconds() / 3600
-            m, b = np.polyfit(df_pred['H'], df_pred['VALUE'], 1)
             
-            futuro_h = np.linspace(df_pred['H'].iloc[-1], df_pred['H'].iloc[-1] + 168, 20)
-            prediccion = m * futuro_h + b
-            fechas_f = [df_pred['FECHA'].iloc[-1] + timedelta(hours=float(h - df_pred['H'].iloc[-1])) for h in futuro_h]
+            # Regresión Polinómica de 2do grado para obtener la curva
+            z = np.polyfit(df_pred['H'], df_pred['VALUE'], 2)
+            p = np.poly1d(z)
             
-            fig_pred = go.Figure(go.Scatter(
-                x=fechas_f, y=prediccion, 
-                name="Tendencia Predicha", 
+            # Generar fechas futuras basadas en el último timestamp real
+            ultima_fecha = df_pred['FECHA'].iloc[-1]
+            ultima_h = df_pred['H'].iloc[-1]
+            futuro_h = np.linspace(ultima_h, ultima_h + 168, 20) # 7 días
+            prediccion = p(futuro_h)
+            fechas_f = [ultima_fecha + timedelta(hours=float(h - ultima_h)) for h in futuro_h]
+            
+            # --- CONCATENACIÓN PARA CONTINUIDAD VISUAL ---
+            # Unimos el último punto real con la serie de predicción
+            x_plot = [df_pred['FECHA'].iloc[-1]] + fechas_f
+            y_plot = [df_pred['VALUE'].iloc[-1]] + list(prediccion)
+            
+            fig_pred = go.Figure()
+            
+            # Agregamos la línea de predicción conectada
+            fig_pred.add_trace(go.Scatter(
+                x=x_plot, y=y_plot, 
+                name="Predicción", 
                 line=dict(color='#ffaa00', width=3, dash='dash')
+            ))
+            
+            # Agregamos un trazo del último histórico para que se vea la unión
+            fig_pred.add_trace(go.Scatter(
+                x=df_pred['FECHA'], y=df_pred['VALUE'],
+                name="Histórico Reciente",
+                line=dict(color='#00d4ff', width=2)
             ))
             
             fig_pred.update_layout(
                 template="plotly_dark", 
                 height=300, 
                 hovermode="x unified",
-                xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)'),
-                yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)'),
                 margin=dict(t=30, b=30)
             )
             st.plotly_chart(fig_pred, use_container_width=True)
-            
-        else:
-            st.warning("Sin datos para este periodo.")
-    except Exception as e:
-        st.error(f"Error: {e}")
-
 
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
 
