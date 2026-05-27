@@ -712,7 +712,7 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
             <p style="color: white; font-size: 12px; margin: 0; font-weight: bold;">Nivel de tanque actual</p>
             <p style="color: white; font-size: 32px; font-weight: bold; margin: 0;">{float(ultimo_nivel):,.2f} <span style="font-size: 18px; color: #00d4ff;">Mts</span></p>
             <p style="color: #cccccc; font-size: 11px; margin-top: 5px;">
-                Nivel Máximo: <span style="color: #00d4ff; font-weight: bold;">{float(nivel_max):,.2f} Mts</span>
+                Nivel de altura del tanque: <span style="color: #00d4ff; font-weight: bold;">{float(nivel_max):,.2f} Mts</span>
             </p>
             <p style="color: white; font-size: 10px; margin-top: 5px;">Última lectura: {fecha_lectura}</p>
         </div>
