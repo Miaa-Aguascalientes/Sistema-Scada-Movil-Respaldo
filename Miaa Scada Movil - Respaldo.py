@@ -762,32 +762,5 @@ if st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-
     except Exception as e:
         st.error(f"Error: {e}")
 
-# ------------------------------------------------------------------------------
-# SECCIÓN DE REBOMBEOS
-# ------------------------------------------------------------------------------
-elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id != "-- Seleccionar --":
-    id_rb = st.session_state.activo_id
-    info_rb = mapa_rebombeos_dict.get(id_rb)
-    st.markdown(f"<h3 style='color:#00d4ff;'>🧊  Estación de Rebombeo: {info_rb['nombre']}</h3>", unsafe_allow_html=True)
-    # ... (Tu lógica de rebombeo existente) ...
 
-# ------------------------------------------------------------------------------
-# SECCIÓN DE SECTORES
-# ------------------------------------------------------------------------------
-elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != "-- Seleccionar --":
-    sec_id = st.session_state.activo_id
-    datos_s = next((s for s in sectores if s['sector'] == sec_id), None)
-    if datos_s:
-        # ... (Tu lógica de sectores existente) ...
 
-# ------------------------------------------------------------------------------
-# VISTA DEFAULT (CORREGIDA)
-# ------------------------------------------------------------------------------
-else:
-    st.markdown("""
-    <div style="text-align: center; margin-top: 40px; padding: 20px; background: rgba(0,212,255,0.02); border: 1px dashed #1f4068; border-radius: 10px;">
-        <p style="color: #00d4ff; font-family: 'Orbitron', sans-serif; font-size: 14px; margin: 0;">
-            Sistema visual Scada. Seleccione una opción superior para generar el gráfico.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
