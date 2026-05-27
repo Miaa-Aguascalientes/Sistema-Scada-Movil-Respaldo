@@ -753,16 +753,22 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
             fig.update_layout(template="plotly_dark", height=300, margin=dict(t=30, b=30, l=10, r=10), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
             st.plotly_chart(fig, use_container_width=True)
 
-            # Proyección 7 días
-            st.markdown("<h4 style='color:#00d4ff; margin-top:30px;'>🔮 Proyección de Nivel</h4>", unsafe_allow_html=True)
-            df_tendencia = df_hist[df_hist['FECHA'] >= (datetime.now() - timedelta(days=1))]
+            # --- PROYECCIÓN (ALGORITMO LINEAL DE TENDENCIA) ---
+            st.markdown("<h4 style='color:#00d4ff; margin-top:30px;'>🔮 Proyección de Nivel (7 días)</h4>", unsafe_allow_html=True)
             
-            if len(df_tendencia) > 5:
-                delta_val = df_tendencia['VALUE'].iloc[-1] - df_tendencia['VALUE'].iloc[0]
-                delta_time_hours = (df_tendencia['FECHA'].iloc[-1] - df_tendencia['FECHA'].iloc[0]).total_seconds() / 3600
-                pendiente = delta_val / delta_time_hours if delta_time_hours > 0 else 0
+            # Usamos los últimos datos del periodo cargado para calcular la tendencia
+            df_tend = df_hist.tail(20) # Tomamos los últimos 20 puntos para ser más precisos
+            if len(df_tend) > 5:
+                # Cálculo de pendiente (delta valor / delta tiempo)
+                x_val = (df_tend['FECHA'] - df_tend['FECHA'].iloc[0]).dt.total_seconds() / 3600
+                y_val = df_tend['VALUE']
+                # Regresión lineal simple
+                n = len(x_val)
+                pendiente = (n * (x_val * y_val).sum() - x_val.sum() * y_val.sum()) / (n * (x_val**2).sum() - x_val.sum()**2)
                 
-                ultimo_v, ultima_f = float(df_hist['VALUE'].iloc[-1]), df_hist['FECHA'].iloc[-1]
+                ultimo_v = float(df_hist['VALUE'].iloc[-1])
+                ultima_f = df_hist['FECHA'].iloc[-1]
+                
                 futuro_f = [ultima_f + timedelta(hours=i*6) for i in range(1, 29)]
                 futuro_v = [max(0, ultimo_v + (pendiente * (i*6))) for i in range(1, 29)]
                 
@@ -772,19 +778,11 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
                 fig_pred.update_layout(template="plotly_dark", height=300, margin=dict(t=30, b=30), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
                 st.plotly_chart(fig_pred, use_container_width=True)
             else:
-                st.info("Datos insuficientes para proyección.")
+                st.info("Datos insuficientes para proyectar tendencia.")
         else:
             st.warning("Sin datos para este periodo.")
     except Exception as e:
-        st.error(f"Error: {e}")
-
-elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id != "-- Seleccionar --":
-    # ... (Tu código de rebombeo aquí) ...
-    pass
-
-elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != "-- Seleccionar --":
-    # ... (Tu código de sectores aquí) ...
-    pass
+        st.error(f"Error cargando proyección: {e}")
 
 
 
