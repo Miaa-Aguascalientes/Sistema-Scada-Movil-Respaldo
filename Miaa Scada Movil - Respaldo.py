@@ -743,20 +743,37 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
             st.plotly_chart(fig, use_container_width=True)
 
             # Algoritmo de Predicción (Regresión Lineal)
-            st.markdown("<h4 style='color:#ffaa00;'>🔮 Predicción de Tendencia</h4>", unsafe_allow_html=True)
-            df_pred = df_hist.tail(30).copy()
-            df_pred['H'] = (df_pred['FECHA'] - df_pred['FECHA'].iloc[0]).dt.total_seconds() / 3600
-            m, b = np.polyfit(df_pred['H'], df_pred['VALUE'], 1)
+            st.markdown("<h4 style='color:#ffaa00;'>🔮 Predicción (Suavizado Exponencial)</h4>", unsafe_allow_html=True)
             
-            futuro_h = np.linspace(df_pred['H'].iloc[-1], df_pred['H'].iloc[-1] + 168, 20)
-            prediccion = m * futuro_h + b
-            fechas_f = [df_pred['FECHA'].iloc[-1] + timedelta(hours=float(h - df_pred['H'].iloc[-1])) for h in futuro_h]
+            # Usamos los últimos datos disponibles
+            df_pred = df_hist.tail(50).copy()
+            y = df_pred['VALUE'].values
             
-            fig_p = go.Figure()
-            fig_p.add_trace(go.Scatter(x=df_hist['FECHA'].tail(50), y=df_hist['VALUE'].tail(50), name="Real"))
-            fig_p.add_trace(go.Scatter(x=fechas_f, y=prediccion, name="Predicción", line=dict(dash='dash', color='#ffaa00')))
-            fig_p.update_layout(template="plotly_dark", height=300)
-            st.plotly_chart(fig_p, use_container_width=True)
+            # Algoritmo: Simple Exponential Smoothing
+            # alpha controla cuánto peso damos a los datos recientes (0.1 a 0.9)
+            alpha = 0.3
+            f = [y[0]]
+            for i in range(1, len(y)):
+                f.append(alpha * y[i-1] + (1 - alpha) * f[i-1])
+            
+            # Predecir los siguientes 20 periodos manteniendo la última tendencia suavizada
+            trend = f[-1] - f[-2]
+            prediccion = [f[-1] + (i * trend) for i in range(1, 21)]
+            
+            # Crear fechas futuras
+            ultima_fecha = df_pred['FECHA'].iloc[-1]
+            fechas_f = [ultima_fecha + timedelta(hours=i*2) for i in range(1, 21)]
+            
+            # Graficar
+            fig_pred = go.Figure()
+            fig_pred.add_trace(go.Scatter(x=df_hist['FECHA'].tail(50), y=df_hist['VALUE'].tail(50), 
+                                          name="Nivel Histórico", line=dict(color='#00d4ff', width=2)))
+            fig_pred.add_trace(go.Scatter(x=fechas_f, y=prediccion, 
+                                          name="Predicción (Suavizado)", 
+                                          line=dict(color='#ffaa00', width=3, dash='dash')))
+            
+            fig_pred.update_layout(template="plotly_dark", height=300, margin=dict(t=30, b=30))
+            st.plotly_chart(fig_pred, use_container_width=True)
         else:
             st.warning("No hay datos históricos para este periodo.")
     except Exception as e:
