@@ -701,22 +701,20 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
     id_tq = st.session_state.activo_id
     info_t = mapa_tanques_dict.get(id_tq)
     
-    # 1. INDICADOR
+    # --- INDICADOR ---
     st.markdown(f"<h3 style='color:#00d4ff;'>🛢️ Análisis de Nivel: {info_t['nombre']}</h3>", unsafe_allow_html=True)
     ultimo_nivel, _ = cargar_datos_scada([info_t['tag_nivel']]).get(info_t['tag_nivel'], (0.0, "N/A"))
-    
     st.markdown(f'''
         <div style="border: 2px solid #00d4ff; padding: 10px; border-radius: 12px; text-align: center; margin-bottom: 20px; background: rgba(0, 212, 255, 0.05);">
             <p style="color: white; font-size: 32px; font-weight: bold; margin: 0;">{float(ultimo_nivel):,.2f} <span style="font-size: 18px; color: #00d4ff;">Mts</span></p>
         </div>
     ''', unsafe_allow_html=True)
     
-    # 2. SELECTOR
+    # --- SELECTOR ---
     opciones = ["Últimos 7 días", "Últimos 14 días"]
     opcion_fecha = st.selectbox("Selecciona rango:", opciones)
     f_ini = datetime.now() - timedelta(days=7 if "7" in opcion_fecha else 14)
 
-    # 3. MODELO DE REPLICACIÓN DE CICLOS (No promedia, REPLICA los picos)
     try:
         engine = get_mysql_scada_engine()
         query = f"SELECT FECHA, VALUE FROM vfitagnumhistory WHERE GATEID IN (SELECT GATEID FROM VfiTagRef WHERE NAME = '{info_t['tag_nivel']}') AND FECHA >= '{f_ini.strftime('%Y-%m-%d %H:%M:%S')}' ORDER BY FECHA ASC"
@@ -725,34 +723,44 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
         if not df.empty:
             df['FECHA'] = pd.to_datetime(df['FECHA'])
             
-            # --- MODELO: Extracción de Ciclos ---
-            # Identificamos el ciclo promedio (tiempo entre picos)
-            picos = df[df['VALUE'] > 4] # Filtramos momentos donde el tanque se llenó
+            # --- LÓGICA DE PROYECCIÓN DE EVENTOS ---
+            # 1. Identificar ciclos de llenado (cuando supera el 80% de su máximo histórico observado)
+            max_val = df['VALUE'].max()
+            umbral = max_val * 0.8
+            picos = df[df['VALUE'] >= umbral]
+            
+            # 2. Calcular frecuencia promedio entre llenados grandes
             if len(picos) > 1:
-                # Calculamos el tiempo promedio entre llenados
-                diffs = picos['FECHA'].diff().mean()
-                # Proyectamos: tomamos la forma del último ciclo y lo desplazamos
-                last_cycle = df[df['FECHA'] > (df['FECHA'].max() - diffs)].copy()
-                last_cycle['FECHA'] = last_cycle['FECHA'] + diffs
+                frecuencia = picos['FECHA'].diff().mean()
                 
-                future_dates = last_cycle['FECHA']
-                future_vals = last_cycle['VALUE']
-            else:
-                # Fallback simple si no hay picos claros
-                future_dates = [df['FECHA'].iloc[-1] + timedelta(hours=i) for i in range(1, 169)]
-                future_vals = df['VALUE'].iloc[-len(future_dates):].values
-
-            # 4. GRÁFICO ÚNICO
+                # 3. Proyectar: Tomar el perfil de los últimos 2 llenados y repetirlos
+                # Esto garantiza que la amplitud (los 6+ metros) se mantenga
+                last_peak_time = picos['FECHA'].iloc[-1]
+                
+                # Generar eventos futuros
+                future_events = []
+                for i in range(1, 4): # Proyectamos 3 eventos futuros
+                    t_futuro = last_peak_time + (frecuencia * i)
+                    if t_futuro < (datetime.now() + timedelta(days=7)):
+                        future_events.append({'FECHA': t_futuro, 'VALUE': max_val})
+                
+                df_future = pd.DataFrame(future_events)
+            
+            # --- GRÁFICO ---
             fig = go.Figure()
             fig.add_trace(go.Scatter(x=df['FECHA'], y=df['VALUE'], name="Real", line=dict(color='#00d4ff', width=2)))
-            fig.add_trace(go.Scatter(x=future_dates, y=future_vals, name="Predicción (Replicación Ciclo)", line=dict(color='#ffcc00', width=2, dash='dot')))
+            
+            if not df_future.empty:
+                fig.add_trace(go.Scatter(x=df_future['FECHA'], y=df_future['VALUE'], name="Predicción (Próximos Llenados)", 
+                                         mode='markers+lines', line=dict(color='#ffcc00', width=2, dash='dot'),
+                                         marker=dict(size=8)))
             
             fig.update_layout(template="plotly_dark", height=400, hovermode="x unified", margin=dict(t=30, b=30))
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.warning("No hay suficientes datos.")
     except Exception as e:
-        st.error(f"Error técnico: {e}")
+        st.error(f"Error: {e}")
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
 
 elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id != "-- Seleccionar --":
