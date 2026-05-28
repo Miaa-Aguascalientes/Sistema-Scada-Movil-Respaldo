@@ -706,16 +706,18 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
     ultimo_nivel, fecha_lectura = data_tq.get(info_t['tag_nivel'], (0.0, "N/A"))
     nivel_max = info_t.get('nivel_max', 0.0)
     
-    # Renderizar el indicador visual con espaciado ajustado
+    # Renderizar el indicador visual con los textos compactados
     st.markdown(f'''
         <div style="border: 2px solid #00d4ff; padding: 10px; border-radius: 12px; text-align: center; margin-bottom: 20px; background: rgba(0, 212, 255, 0.05);">
-            <p style="color: white; font-size: 12px; margin: 0 0 5px 0; font-weight: bold;">Nivel de tanque actual</p>
-            <p style="color: white; font-size: 32px; font-weight: bold; margin: 0;">{float(ultimo_nivel):,.2f} <span style="font-size: 18px; color: #00d4ff;">Mts</span></p>
-            <div style="margin-top: -5px;">
-                <p style="color: #cccccc; font-size: 12px; margin: 0;">
-                    Nivel Máximo del tanque: <span style="color: #00d4ff; font-weight: bold;">{float(nivel_max):,.2f} Mts</span>
+            <p style="color: white; font-size: 12px; margin: 0; line-height: 1; font-weight: bold;">Nivel de tanque actual</p>
+            <p style="color: white; font-size: 32px; font-weight: bold; margin: -5px 0 0 0; line-height: 1.2;">
+                {float(ultimo_nivel):,.2f} <span style="font-size: 18px; color: #00d4ff;">Mts</span>
+            </p>
+            <div style="margin-top: 2px;">
+                <p style="color: #cccccc; font-size: 12px; margin: 0; line-height: 1.4;">
+                    Nivel Máximo: <span style="color: #00d4ff; font-weight: bold;">{float(nivel_max):,.2f} Mts</span>
                 </p>
-                <p style="color: white; font-size: 12px; margin: 0;">Última lectura: {fecha_lectura}</p>
+                <p style="color: white; font-size: 12px; margin: 0; line-height: 1;">Última lectura: {fecha_lectura}</p>
             </div>
         </div>
     ''', unsafe_allow_html=True)
