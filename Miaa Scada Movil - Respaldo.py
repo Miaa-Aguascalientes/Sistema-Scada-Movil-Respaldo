@@ -8,7 +8,6 @@ from datetime import datetime, timedelta
 import plotly.graph_objects as go
 import time
 import pytz
-import numpy as np
 
 # Configuración de página optimizada para móviles
 st.set_page_config(
@@ -694,63 +693,118 @@ if st.session_state.activo_tipo == "Pozo" and st.session_state.activo_id != "-- 
         )
 
 
-# ------------------------------------------------------------------------------
-# SECCION DE TANQUES (CORREGIDA: AMBOS GRÁFICOS)
+# ------------------------------------------------------------------------------ seccion de tanques ------------------------------------------------------------------------
 
 elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-- Seleccionar --":
     id_tq = st.session_state.activo_id
     info_t = mapa_tanques_dict.get(id_tq)
     
-    st.markdown(f"<h3 style='color:#00d4ff;'>🛢️ Análisis de Nivel: {info_t['nombre']}</h3>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='color:#00d4ff;'>🛢️  Análisis de Nivel: {info_t['nombre']}</h3>", unsafe_allow_html=True)
+
+    # --- OBTENER DATOS ---
+    data_tq = cargar_datos_scada([info_t['tag_nivel']])
+    ultimo_nivel, fecha_lectura = data_tq.get(info_t['tag_nivel'], (0.0, "N/A"))
+    nivel_max = info_t.get('nivel_max', 0.0)
     
-    # 1. INDICADOR
-    ultimo_nivel, _ = cargar_datos_scada([info_t['tag_nivel']]).get(info_t['tag_nivel'], (0.0, "N/A"))
+    # Renderizar el indicador visual incluyendo el límite máximo
     st.markdown(f'''
         <div style="border: 2px solid #00d4ff; padding: 10px; border-radius: 12px; text-align: center; margin-bottom: 20px; background: rgba(0, 212, 255, 0.05);">
+            <p style="color: white; font-size: 12px; margin: 0; font-weight: bold;">Nivel de tanque actual</p>
             <p style="color: white; font-size: 32px; font-weight: bold; margin: 0;">{float(ultimo_nivel):,.2f} <span style="font-size: 18px; color: #00d4ff;">Mts</span></p>
+            <p style="color: #cccccc; font-size: 11px; margin-top: 5px;">
+                Nivel Máximo: <span style="color: #00d4ff; font-weight: bold;">{float(nivel_max):,.2f} Mts</span>
+            </p>
+            <p style="color: white; font-size: 10px; margin-top: 5px;">Última lectura: {fecha_lectura}</p>
         </div>
     ''', unsafe_allow_html=True)
     
-    # 2. SELECTOR
-    opciones = ["Últimos 7 días", "Últimos 14 días"]
-    opcion_fecha = st.selectbox("Selecciona rango:", opciones)
-    f_ini = datetime.now() - timedelta(days=7 if "7" in opcion_fecha else 14)
+# 1. Definición de opciones
+    opciones = ["Hoy", "Ayer", "Últimos 7 días", "Últimos 14 días", "Este Mes", "Último Mes", "Últimos 6 meses", "Personalizado"]
+    opcion_fecha = st.selectbox("Selecciona rango:", opciones, index=2) # Index 0 para empezar en 'Hoy'
+    
+    hoy_dt = datetime.now()
+    f_fin = hoy_dt
+    
+    # 2. Lógica extendida para calcular fechas
+    if opcion_fecha == "Hoy":
+        f_ini = hoy_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif opcion_fecha == "Ayer":
+        f_ini = hoy_dt - timedelta(days=1)
+    elif opcion_fecha == "Últimos 7 días":
+        f_ini = hoy_dt - timedelta(days=7)
+    elif opcion_fecha == "Últimos 14 días":
+        f_ini = hoy_dt - timedelta(days=14)
+    elif opcion_fecha == "Este Mes":
+        f_ini = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    elif opcion_fecha == "Último Mes":
+        # Primer día del mes actual menos un día nos da el mes anterior
+        primer_dia_actual = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        f_ini = (primer_dia_actual - timedelta(days=1)).replace(day=1)
+        f_fin = primer_dia_actual - timedelta(seconds=1)
+    elif opcion_fecha == "Últimos 6 meses":
+        f_ini = hoy_dt - timedelta(days=180)
+    elif opcion_fecha == "Personalizado":
+        rango = st.date_input("Selecciona rango:", [hoy_dt - timedelta(days=7), hoy_dt])
+        if len(rango) == 2:
+            f_ini, f_fin = rango[0], rango[1]
+        else:
+            f_ini = hoy_dt - timedelta(days=7)
 
-    # 3. DATOS Y PROYECCIÓN
+    # 3. Consulta SQL ajustada con las nuevas variables
     try:
         engine = get_mysql_scada_engine()
-        query = f"SELECT FECHA, VALUE FROM vfitagnumhistory WHERE GATEID IN (SELECT GATEID FROM VfiTagRef WHERE NAME = '{info_t['tag_nivel']}') AND FECHA >= '{f_ini.strftime('%Y-%m-%d %H:%M:%S')}' ORDER BY FECHA ASC"
-        df = pd.read_sql(query, engine)
+        # Convertimos las fechas a string con formato explícito para evitar errores de interpretación
+        f_ini_str = f_ini.strftime('%Y-%m-%d %H:%M:%S')
+        f_fin_str = f_fin.strftime('%Y-%m-%d %H:%M:%S') if isinstance(f_fin, datetime) else f_fin.strftime('%Y-%m-%d %H:%M:%S')
         
-        if not df.empty:
-            df['FECHA'] = pd.to_datetime(df['FECHA'])
-            
-            # --- LÓGICA DE PROYECCIÓN ---
-            # Identificamos el último pico (llenado)
-            ultimo_pico_df = df[df['VALUE'] > 5].tail(1)
+        query = f"""
+            SELECT h.FECHA, h.VALUE FROM vfitagnumhistory h
+            JOIN VfiTagRef r ON h.GATEID = r.GATEID
+            WHERE r.NAME = '{info_t['tag_nivel']}' 
+            AND h.FECHA BETWEEN '{f_ini_str}' AND '{f_fin_str}'
+            ORDER BY h.FECHA ASC
+        """
+        df_hist = pd.read_sql(query, engine)
+        
+        if not df_hist.empty:
+            df_hist['FECHA'] = pd.to_datetime(df_hist['FECHA'])
             
             fig = go.Figure()
-            # Línea Real
-            fig.add_trace(go.Scatter(x=df['FECHA'], y=df['VALUE'], name="Real", line=dict(color='#00d4ff', width=2)))
+            fig.add_trace(go.Scatter(
+                x=df_hist['FECHA'],
+                y=df_hist['VALUE'],
+                name="Nivel Tq",
+                mode='lines+markers', # Cambio realizado: líneas y puntos
+                line=dict(color='#00ffcc', width=2),
+                fill='tozeroy',
+                fillcolor='rgba(0, 255, 204, 0.1)',
+                hovertemplate="<b>Nivel</b>: %{y:.2f} m<extra></extra>"
+            ))
             
-            # Proyección forzada (copiamos el último patrón de 24 horas hacia adelante)
-            if not ultimo_pico_df.empty:
-                ref_time = ultimo_pico_df['FECHA'].iloc[0]
-                # Tomamos las últimas 24 horas como patrón
-                patron = df[df['FECHA'] > (df['FECHA'].max() - timedelta(hours=24))]
-                
-                # Desplazamos el patrón al futuro
-                future_x = [t + timedelta(hours=48) for t in patron['FECHA']]
-                fig.add_trace(go.Scatter(x=future_x, y=patron['VALUE'], name="Predicción (Patrón 48h)", 
-                                         line=dict(color='#ffcc00', width=2, dash='dot')))
-            
-            fig.update_layout(template="plotly_dark", height=400, hovermode="x unified", margin=dict(t=30, b=30))
+            fig.update_layout(
+                template="plotly_dark",
+                height=300,
+                margin=dict(t=60, b=80, l=10, r=10),
+                paper_bgcolor='rgba(0,0,0,0)', 
+                plot_bgcolor='rgba(0,0,0,0)',
+                hovermode="x unified",
+                showlegend=True,
+                legend=dict(
+                    orientation="h",
+                    y=1.2,
+                    x=0.5,
+                    xanchor="center",
+                    font=dict(size=10, color='white')
+                ),    
+                xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)', color='white'),
+                yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)', color='white')
+            )
             st.plotly_chart(fig, use_container_width=True)
-            
         else:
-            st.warning("No hay suficientes datos.")
+            st.warning("Sin datos para este tanque en el periodo elegido.")
     except Exception as e:
-        st.error(f"Error técnico: {e}")
+        st.error(f"Error cargando tanque: {e}")
+
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
 
 elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id != "-- Seleccionar --":
