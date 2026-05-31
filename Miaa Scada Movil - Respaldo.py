@@ -443,12 +443,22 @@ def reset_tanque():
         st.session_state.activo_id = st.session_state.opt_tanque
 
 def reset_rebombeo():
-    if st.session_state.opt_rebombeo != "-- Seleccionar --":
+    # Recargamos para asegurar consistencia
+    mapa = cargar_rebombeos_desde_db()
+    # Invertimos para buscar el ID mediante el nombre
+    nombres_a_id = {v['nombre']: k for k, v in mapa.items()}
+    
+    seleccion = st.session_state.opt_rebombeo
+    
+    if seleccion != "-- Seleccionar --":
         st.session_state.opt_pozo = "-- Seleccionar --"
         st.session_state.opt_tanque = "-- Seleccionar --"
         st.session_state.opt_sector = "-- Seleccionar --"
         st.session_state.activo_tipo = "Rebombeo"
-        st.session_state.activo_id = st.session_state.opt_rebombeo
+        # Aquí guardamos el ID técnico (ej. 'RB_01') en lugar del nombre
+        st.session_state.activo_id = nombres_a_id.get(seleccion)
+    else:
+        st.session_state.activo_id = "-- Seleccionar --"
 
 def reset_sector():
     if st.session_state.opt_sector != "-- Seleccionar --":
@@ -476,14 +486,13 @@ with c1:
     st.selectbox("🛢️  Tanques", ["-- Seleccionar --"] + sorted(list(mapa_tanques_dict.keys())), key="opt_tanque", on_change=reset_tanque)
 
 with c2:
-    # 1. Carreguem el diccionari (que ja està filtrat per "Con telemetria" a la funció)
+    # 1. Cargamos el mapa filtrado por telemetría
     mapa_rebombeos_dict = cargar_rebombeos_desde_db()
     
-    # 2. Creem un diccionari on la CLAU és el nom visible i el VALOR és l'ID tècnic
-    # Això permet que el selectbox mostri el nom, però guardi l'ID al session_state
+    # 2. Creamos un diccionario: { "Nombre_visible": "ID_tecnico" }
     opciones_nombres = {v['nombre']: k for k, v in mapa_rebombeos_dict.items()}
     
-    # 3. Definim el selectbox usant els NOMBRES (les claus del nou diccionari)
+    # 3. Usamos los nombres en el selectbox, pero el 'key' y 'on_change' manejan la lógica
     st.selectbox(
         "🧊 Rebombeos", 
         ["-- Seleccionar --"] + sorted(list(opciones_nombres.keys())), 
