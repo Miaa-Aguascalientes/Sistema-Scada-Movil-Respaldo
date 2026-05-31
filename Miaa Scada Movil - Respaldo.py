@@ -821,41 +821,21 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
 
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
 
-# ------------------------------------------------------------------------------
-mapa_rebombeos_dict = cargar_rebombeos_desde_db()
 
-# 2. Selector en la barra lateral o sección principal
-opciones_nombres = {v['nombre']: k for k, v in mapa_rebombeos_dict.items()}
-seleccion = st.selectbox(
-    "Selecciona una estación de rebombeo:", 
-    options=["-- Seleccionar --"] + list(opciones_nombres.keys())
-)
-
-# Actualizamos el estado si hay una selección válida
-if seleccion != "-- Seleccionar --":
-    st.session_state.activo_id = opciones_nombres[seleccion]
-    st.session_state.activo_tipo = "Rebombeo"
-
-# ------------------------------------------------------------------------------
-# 3. Sección de visualización de Rebombeos
 # ------------------------------------------------------------------------------
 if st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id != "-- Seleccionar --":
-    id_rb = st.session_state.activo_id
-    info_rb = mapa_rebombeos_dict.get(id_rb)
+    # Usamos el mapa cargado arriba
+    info_rb = mapa_rebombeos_dict.get(st.session_state.activo_id)
     
-    # Validar que la información exista en el diccionario
     if info_rb:
         st.markdown(f"<h3 style='color:#00d4ff;'>🧊 Estación de Rebombeo: {info_rb['nombre']}</h3>", unsafe_allow_html=True)
         
-        # Consulta de estados inmediatos
+        # ... (aquí va el resto de tu lógica de métricas y gráficos que ya tenías)
         tags_rb = [info_rb.get('presion'), info_rb.get('nivel_tanque')]
         data_scada_rb = cargar_datos_scada([t for t in tags_rb if t])
-        
-        # Extracción segura de valores
         p_rb, _ = data_scada_rb.get(info_rb.get('presion'), (0.0, "N/A"))
         n_rb, _ = data_scada_rb.get(info_rb.get('nivel_tanque'), (0.0, "N/A"))
         
-        # Métricas
         rc1, rc2 = st.columns(2)
         rc1.metric("Presión Actual", f"{float(p_rb):.2f} Kg/cm²")
         rc2.metric("Nivel de Succión", f"{float(n_rb):.2f} m")
