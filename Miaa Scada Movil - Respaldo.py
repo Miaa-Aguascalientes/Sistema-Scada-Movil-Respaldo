@@ -476,9 +476,22 @@ with c1:
     st.selectbox("🛢️  Tanques", ["-- Seleccionar --"] + sorted(list(mapa_tanques_dict.keys())), key="opt_tanque", on_change=reset_tanque)
 
 with c2:
-    st.selectbox("🧊 Rebombeos", ["-- Seleccionar --"] + sorted(list(mapa_rebombeos_dict.keys())), key="opt_rebombeo", on_change=reset_rebombeo)
+    # 1. Carreguem el diccionari (que ja està filtrat per "Con telemetria" a la funció)
+    mapa_rebombeos_dict = cargar_rebombeos_desde_db()
+    
+    # 2. Creem un diccionari on la CLAU és el nom visible i el VALOR és l'ID tècnic
+    # Això permet que el selectbox mostri el nom, però guardi l'ID al session_state
+    opciones_nombres = {v['nombre']: k for k, v in mapa_rebombeos_dict.items()}
+    
+    # 3. Definim el selectbox usant els NOMBRES (les claus del nou diccionari)
+    st.selectbox(
+        "🧊 Rebombeos", 
+        ["-- Seleccionar --"] + sorted(list(opciones_nombres.keys())), 
+        key="opt_rebombeo", 
+        on_change=reset_rebombeo
+    )
+    
     st.selectbox("🏘️ Sectores Hidráulicos", ["-- Seleccionar --"] + sorted([s['sector'] for s in sectores if s.get('sector')]), key="opt_sector", on_change=reset_sector)
-
 st.divider()
 
 # 4. SECCION ----------------------------------------- RENDERIZADO DE GRÁFICOS Y MÉTRICAS SEGÚN LA SELECCIÓN ACTIVA -------------------------------------------------------------
@@ -822,7 +835,6 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
 
 
-# ------------------------------------------------------------------------------
 if st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id != "-- Seleccionar --":
     # Usamos el mapa cargado arriba
     info_rb = mapa_rebombeos_dict.get(st.session_state.activo_id)
