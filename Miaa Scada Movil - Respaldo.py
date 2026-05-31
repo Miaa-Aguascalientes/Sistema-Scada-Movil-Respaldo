@@ -350,14 +350,24 @@ def cargar_rebombeos_desde_db():
     try:
         df_rb = pd.read_sql("SELECT * FROM Diccionario_de_rebombeos", engine)
         nuevo_mapa_rb = {}
-        for _, row in df_rb.iterrows():
+        
+        # Filtramos solo los que tienen telemetria antes de mapear
+        # .str.strip() ayuda a eliminar espacios accidentales
+        df_filtrado = df_rb[df_rb['Telemetria'].str.strip() == "Con telemetria"]
+        
+        for _, row in df_filtrado.iterrows():
             nuevo_mapa_rb[row['Rebombeo']] = {
-                "nombre": row['Nombre_rebombeo'], "telemetria": row['Telemetria'], "presion": row['presion'], "nivel_tanque": row['nivel_tanque'],
+                "nombre": row['Nombre_rebombeo'], 
+                "telemetria": row['Telemetria'], 
+                "presion": row['presion'], 
+                "nivel_tanque": row['nivel_tanque'],
                 "voltajes_l": [row['voltaje_L1'], row['voltaje_L2'], row['voltaje_L3']],
                 "amperajes_l": [row['amperaje_L1'], row['amperaje_L2'], row['amperaje_L3']]
             }
         return nuevo_mapa_rb
-    except: return {}
+    except Exception as e:
+        st.error(f"Error cargando rebombeos: {e}")
+        return {}
 
 @st.cache_data(ttl=3600)
 def cargar_puntos_de_control_desde_db():
@@ -811,30 +821,67 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
 
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
 
-elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id != "-- Seleccionar --":
+# ------------------------------------------------------------------------------
+mapa_rebombeos_dict = cargar_rebombeos_desde_db()
+
+# 2. Selector en la barra lateral o sección principal
+opciones_nombres = {v['nombre']: k for k, v in mapa_rebombeos_dict.items()}
+seleccion = st.selectbox(
+    "Selecciona una estación de rebombeo:", 
+    options=["-- Seleccionar --"] + list(opciones_nombres.keys())
+)
+
+# Actualizamos el estado si hay una selección válida
+if seleccion != "-- Seleccionar --":
+    st.session_state.activo_id = opciones_nombres[seleccion]
+    st.session_state.activo_tipo = "Rebombeo"
+
+# ------------------------------------------------------------------------------
+# 3. Sección de visualización de Rebombeos
+# ------------------------------------------------------------------------------
+if st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id != "-- Seleccionar --":
     id_rb = st.session_state.activo_id
     info_rb = mapa_rebombeos_dict.get(id_rb)
     
-    st.markdown(f"<h3 style='color:#00d4ff;'>🧊  Estación de Rebombeo: {info_rb['nombre']}</h3>", unsafe_allow_html=True)
-    
-    # Consulta de estados inmediatos
-    tags_rb = [info_rb.get('presion'), info_rb.get('nivel_tanque')]
-    data_scada_rb = cargar_datos_scada([t for t in tags_rb if t])
-    
-    p_rb, _ = data_scada_rb.get(info_rb.get('presion'), (0.0, "N/A"))
-    n_rb, _ = data_scada_rb.get(info_rb.get('nivel_tanque'), (0.0, "N/A"))
-    
-    rc1, rc2 = st.columns(2)
-    rc1.metric("Presión Actual", f"{float(p_rb):.2f} Kg/cm²")
-    rc2.metric("Nivel de Succión", f"{float(n_rb):.2f} m")
-    
-    # Gráfico histórico rápido de presión de Rebombeo
-    st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Histórico de Presión (Últimos 7 días)</h4>", unsafe_allow_html=True)
-    df_p_rb = obtener_historia_7_dias(info_rb.get('presion'))
-    if not df_p_rb.empty:
-        fig_rb = go.Figure(go.Scatter(x=df_p_rb['FECHA'], y=df_p_rb['VALUE'], mode='lines', line=dict(color='#00ff00', width=2)))
-        fig_rb.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig_rb, use_container_width=True)
+    # Validar que la información exista en el diccionario
+    if info_rb:
+        st.markdown(f"<h3 style='color:#00d4ff;'>🧊 Estación de Rebombeo: {info_rb['nombre']}</h3>", unsafe_allow_html=True)
+        
+        # Consulta de estados inmediatos
+        tags_rb = [info_rb.get('presion'), info_rb.get('nivel_tanque')]
+        data_scada_rb = cargar_datos_scada([t for t in tags_rb if t])
+        
+        # Extracción segura de valores
+        p_rb, _ = data_scada_rb.get(info_rb.get('presion'), (0.0, "N/A"))
+        n_rb, _ = data_scada_rb.get(info_rb.get('nivel_tanque'), (0.0, "N/A"))
+        
+        # Métricas
+        rc1, rc2 = st.columns(2)
+        rc1.metric("Presión Actual", f"{float(p_rb):.2f} Kg/cm²")
+        rc2.metric("Nivel de Succión", f"{float(n_rb):.2f} m")
+        
+        # Gráfico histórico
+        st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Histórico de Presión (Últimos 7 días)</h4>", unsafe_allow_html=True)
+        df_p_rb = obtener_historia_7_dias(info_rb.get('presion'))
+        
+        if df_p_rb is not None and not df_p_rb.empty:
+            fig_rb = go.Figure(go.Scatter(
+                x=df_p_rb['FECHA'], 
+                y=df_p_rb['VALUE'], 
+                mode='lines', 
+                line=dict(color='#00ff00', width=2)
+            ))
+            fig_rb.update_layout(
+                template="plotly_dark", 
+                paper_bgcolor='rgba(0,0,0,0)', 
+                plot_bgcolor='rgba(0,0,0,0)',
+                margin=dict(l=0, r=0, t=20, b=0)
+            )
+            st.plotly_chart(fig_rb, use_container_width=True)
+        else:
+            st.info("No hay datos históricos disponibles para este periodo.")
+    else:
+        st.error("Error: No se encontró información para la estación seleccionada.")
 
 # ------------------------------------------------------------------------------ seccion de sectores ------------------------------------------------------------------------
 
