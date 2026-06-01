@@ -863,18 +863,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
         # Filtramos posibles None
         tags_validos = [t for t in tags_a_consultar if t]
         tags_in_clause = ",".join([f"'{t}'" for t in tags_validos])
-        
-        # Consulta para el último valor de cada tag
-        query_ultimos = f"""
-            SELECT r.NAME as TAG, h.VALUE
-            FROM vfitagnumhistory h
-            JOIN VfiTagRef r ON h.GATEID = r.GATEID
-            WHERE r.NAME IN ({tags_in_clause})
-            AND h.FECHA = (SELECT MAX(h2.FECHA) FROM vfitagnumhistory h2 WHERE h2.GATEID = h.GATEID)
-        """
-        df_ultimos = pd.read_sql(query_ultimos, engine)
-        mapa_valores = dict(zip(df_ultimos['TAG'], df_ultimos['VALUE']))
-        
+                
         p_rb = mapa_valores.get(info_rb.get('presion'), 0.0)
         n_rb = mapa_valores.get(info_rb.get('nivel_tanque'), 0.0)
         sp_dia = mapa_valores.get(info_rb.get('setpoint_dia'), 0.0)
@@ -899,8 +888,8 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
         
         # Setpoints (Fila 2 - Debajo de los anteriores)
         rc3, rc4 = st.columns(2)
-        rc3.metric("☀️ Set Point Día", f"{float(sp_dia):.2f} mts")
-        rc4.metric("🌙 Set Point Noche", f"{float(sp_noche):.2f} mts")
+        rc3.metric("☀️ Set Point Día", f"{float(sp_dia):.2f} Kg/cm²")
+        rc4.metric("🌙 Set Point Noche", f"{float(sp_noche):.2f} Kg/cm²")
         # -------------------------------------------------------------------------
         
         # 2. Selector de Rango de Fechas
@@ -927,17 +916,24 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
             if len(rango) == 2: f_fin = pd.to_datetime(rango[1]).replace(hour=23, minute=59, second=59)
         
         # 3. Consulta de Histórico (Ahora todo está dentro del bloque if info_rb)
+     
         st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Histórico: Presión y Nivel de Tanque</h4>", unsafe_allow_html=True)
         
         engine = get_mysql_scada_engine()
         tag_p = info_rb.get('presion')
         tag_n = info_rb.get('nivel_tanque')
+        tag_sd = info_rb.get('setpoint_dia')
+        tag_sn = info_rb.get('setpoint_noche')
+        
+        # Consultamos todos los tags necesarios para el gráfico y los indicadores
+        tags_todos = [t for t in [tag_p, tag_n, tag_sd, tag_sn] if t]
+        tags_str = ",".join([f"'{t}'" for t in tags_todos])
         
         query = f"""
             SELECT h.FECHA, h.VALUE, r.NAME as TAG
             FROM vfitagnumhistory h
             JOIN VfiTagRef r ON h.GATEID = r.GATEID
-            WHERE r.NAME IN ('{tag_p}', '{tag_n}')
+            WHERE r.NAME IN ({tags_str})
             AND h.FECHA BETWEEN '{f_ini.strftime('%Y-%m-%d %H:%M:%S')}' AND '{f_fin.strftime('%Y-%m-%d %H:%M:%S')}'
             ORDER BY h.FECHA ASC
         """
