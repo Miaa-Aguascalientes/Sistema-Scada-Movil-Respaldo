@@ -871,7 +871,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
 
 # Renderizado del indicador visual (estilo similar al de tu imagen)
         st.markdown(f"""
-            <div style="border: 2px solid {color_estado}; padding: 10px; border-radius: 10px; text-align: center; margin-bottom: 20px; line-height: 1.2;">
+            <div style="border: 2px solid {color_estado}; padding: 5px; border-radius: 10px; text-align: center; margin-bottom: 20px; line-height: 1.2;">
                 <p style="margin: 0; font-size: 12px; color: #FFFFFF; padding-bottom: 0px;">ESTADO DEL SISTEMA</p>
                 <h3 style="margin: 0; color: {color_estado};">{estado_texto}</h3>
                 <p style="margin: 0; font-size: 12px; color: #FFFFFF; padding-top: 0px;">Última actualización: {fecha_actual}</p>
