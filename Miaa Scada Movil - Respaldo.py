@@ -925,34 +925,33 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
         """, unsafe_allow_html=True)
 
         # CSS para forzar el icono a la izquierda del valor
-            st.markdown("""
-                <style>
-                [data-testid="stMetric"] {
-                    display: flex;
-                    flex-direction: row-reverse;
-                    justify-content: flex-end;
-                    align-items: center;
-                    gap: 10px;
-                }
-                [data-testid="stMetricLabel"] {
-                    order: 2;
-                    margin-bottom: 0px !important;
-                }
-                [data-testid="stMetricValue"] {
-                    order: 1;
-                    font-size: 20px !important;
-                }
-                </style>
-            """, unsafe_allow_html=True)
+            st.markdown(f"""
+            <div style="border: 2px solid {color_estado}; padding: 10px; border-radius: 10px; text-align: center; margin-bottom: 20px; line-height: 1.2;">
+                <p style="margin: 0; font-size: 12px; color: #FFFFFF; padding-bottom: 0px;">ESTADO DEL SISTEMA</p>
+                <h3 style="margin: 0; color: {color_estado};">{estado_texto}</h3>
+                <p style="margin: 0; font-size: 12px; color: #FFFFFF; padding-top: 0px;">Última actualización: {fecha_actual}</p>
+            </div>
+        """, unsafe_allow_html=True)
+            
+            def metric_con_icono_al_lado(label, value, icon, unit):
+    # Título arriba
+                st.markdown(f"<p style='font-size: 14px; margin-bottom: 2px; color: #888888;'>{label}</p>", unsafe_allow_html=True)
+    # Valor + Icono en la misma línea
+                st.markdown(f"<h2 style='margin-top: 0px; font-size: 24px;'>{icon} {value} <span style='font-size: 14px;'>{unit}</span></h2>", unsafe_allow_html=True)
 
             # --- Métricas (Usando tu indexación exacta) ---
+            # Renderizado usando tu indexación exacta
             rc1, rc2 = st.columns(2)
-            rc1.metric("🕛 Presión", f"{float(p_rb):.2f} Kg/cm²")
-            rc2.metric("🛢️ Nivel Tanque", f"{float(n_rb):.2f} mts")
-            
+            with rc1:
+                metric_con_icono_al_lado("Última Presión", f"{float(p_rb):.2f}", "🕛", "Kg/cm²")
+            with rc2:
+                metric_con_icono_al_lado("Último Nivel Tanque", f"{float(n_rb):.2f}", "🛢️", "mts")
+
             rc3, rc4 = st.columns(2)
-            rc3.metric("☀️ Set Point Día", f"{float(sp_dia):.2f} Kg/cm²")
-            rc4.metric("🌙 Set Point Noche", f"{float(sp_noche):.2f} Kg/cm²")
+            with rc3:
+                metric_con_icono_al_lado("Setpoint Día", f"{float(sp_dia):.2f}", "☀️", "Kg/cm²")
+            with rc4:
+                metric_con_icono_al_lado("Setpoint Noche", f"{fl
             
             # --- Gráfico ---
             st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Histórico: Presión y Nivel de Tanque</h4>", unsafe_allow_html=True)
