@@ -862,9 +862,8 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
         rc2.metric("Nivel actual de Tanque", f"{float(n_rb):.2f} mts")
         
         # 2. Selector de Rango de Fechas
-        st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Configuración de Histórico</h4>", unsafe_allow_html=True)
         opciones = ["Hoy", "Ayer", "Últimos 7 días", "Últimos 14 días", "Este Mes", "Último Mes", "Últimos 6 meses", "Personalizado"]
-        opcion_fecha = st.selectbox("Rango de tiempo:", opciones, index=0, key="sel_rango_rb")
+        opcion_fecha = st.selectbox("Rango de tiempo:", opciones, index=2, key="sel_rango_rb")
         
         hoy_dt = datetime.now()
         f_fin = hoy_dt
@@ -886,7 +885,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
             if len(rango) == 2: f_fin = pd.to_datetime(rango[1]).replace(hour=23, minute=59, second=59)
         
         # 3. Consulta de Histórico (Ahora todo está dentro del bloque if info_rb)
-        st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Histórico: Presión y Nivel de Succión</h4>", unsafe_allow_html=True)
+        st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Histórico: Presión y Nivel de Tanque</h4>", unsafe_allow_html=True)
         
         engine = get_mysql_scada_engine()
         tag_p = info_rb.get('presion')
