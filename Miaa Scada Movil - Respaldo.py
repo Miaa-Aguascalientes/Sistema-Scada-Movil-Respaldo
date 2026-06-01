@@ -972,9 +972,8 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
                 plot_bgcolor='rgba(0,0,0,0)',
                 hovermode="x unified", 
                 height=280,
-                
                 margin=dict(t=40, b=40, l=20, r=20),
-                yaxis=dict(title="Nivel (m)"), tickformat=".2f"),
+                yaxis=dict(title="Nivel (m)", tickformat=".2f"),
                 yaxis2=dict(
                     title="Presión (Kg/cm²)", 
                     overlaying="y", 
@@ -984,7 +983,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
                 legend=dict(
                     orientation="h",
                     yanchor="bottom",
-                    y=1.2),
+                    y=1.2,
                     xanchor="left",
                     x=0
                 )
