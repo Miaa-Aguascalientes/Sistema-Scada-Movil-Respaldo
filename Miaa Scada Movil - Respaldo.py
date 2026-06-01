@@ -859,7 +859,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
         
         rc1, rc2 = st.columns(2)
         rc1.metric("Presión Actual", f"{float(p_rb):.2f} Kg/cm²")
-        rc2.metric("Nivel de Succión", f"{float(n_rb):.2f} m")
+        rc2.metric("Nivel de Succión", f"{float(n_rb):.2f} mts")
         
         # 2. Selector de Rango de Fechas
         st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Configuración de Histórico</h4>", unsafe_allow_html=True)
@@ -872,44 +872,62 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
         elif opcion_fecha == "Últimos 7 días": f_ini = hoy_dt - timedelta(days=7)
         elif opcion_fecha == "Últimos 14 días": f_ini = hoy_dt - timedelta(days=14)
         elif opcion_fecha == "Este Mes": f_ini = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        else: # Personalizado
+        else:
             rango = st.date_input("Selecciona rango:", [hoy_dt - timedelta(days=7), hoy_dt], key="date_rb")
             f_ini = rango[0] if len(rango) == 2 else hoy_dt - timedelta(days=7)
         
-        f_fin = hoy_dt # Fecha fin siempre es ahora
+        f_fin = hoy_dt
         
-        # 3. Consulta de Histórico con Filtro de Fecha
-        st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Histórico de Presión</h4>", unsafe_allow_html=True)
+        # 3. Consulta de Histórico (Ahora todo está dentro del bloque if info_rb)
+        st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Histórico: Presión y Nivel de Succión</h4>", unsafe_allow_html=True)
         
         engine = get_mysql_scada_engine()
         tag_p = info_rb.get('presion')
+        tag_n = info_rb.get('nivel_tanque')
         
         query = f"""
-            SELECT h.FECHA, h.VALUE 
+            SELECT h.FECHA, h.VALUE, r.NAME as TAG
             FROM vfitagnumhistory h
             JOIN VfiTagRef r ON h.GATEID = r.GATEID
-            WHERE r.NAME = '{tag_p}'
+            WHERE r.NAME IN ('{tag_p}', '{tag_n}')
             AND h.FECHA BETWEEN '{f_ini.strftime('%Y-%m-%d %H:%M:%S')}' AND '{f_fin.strftime('%Y-%m-%d %H:%M:%S')}'
             ORDER BY h.FECHA ASC
         """
-        df_p_rb = pd.read_sql(query, engine)
+        df_hist = pd.read_sql(query, engine)
         
-        if not df_p_rb.empty:
-            fig_rb = go.Figure(go.Scatter(
-                x=pd.to_datetime(df_p_rb['FECHA']), 
-                y=df_p_rb['VALUE'], 
-                mode='lines', 
-                line=dict(color='#00ff00', width=2)
+        if not df_hist.empty:
+            df_hist['FECHA'] = pd.to_datetime(df_hist['FECHA'])
+            
+            fig_rb = go.Figure()
+            
+            # Trazas
+            df_p = df_hist[df_hist['TAG'] == tag_p]
+            fig_rb.add_trace(go.Scatter(
+                x=df_p['FECHA'], y=df_p['VALUE'].round(2),
+                name='Presión (Kg/cm²)', mode='lines+markers',
+                line=dict(color='#00ff00', width=2), marker=dict(size=4)
             ))
+            
+            df_n = df_hist[df_hist['TAG'] == tag_n]
+            fig_rb.add_trace(go.Scatter(
+                x=df_n['FECHA'], y=df_n['VALUE'].round(2),
+                name='Nivel (m)', mode='lines+markers',
+                line=dict(color='#00ff00', width=2), marker=dict(size=4)
+            ))
+            
             fig_rb.update_layout(
-                template="plotly_dark", 
-                paper_bgcolor='rgba(0,0,0,0)', 
+                template="plotly_dark",
+                paper_bgcolor='rgba(0,0,0,0)',
                 plot_bgcolor='rgba(0,0,0,0)',
-                margin=dict(l=0, r=0, t=20, b=0)
+                hovermode="x unified",
+                yaxis=dict(tickformat=".2f"),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                margin=dict(l=0, r=0, t=30, b=0)
             )
+            fig_rb.update_traces(hovertemplate="%{y:.2f}")
             st.plotly_chart(fig_rb, use_container_width=True)
         else:
-            st.info("No hay datos históricos disponibles para este periodo.")
+            st.info("No hay datos históricos disponibles para el periodo seleccionado.")
     else:
         st.error("Error: No se encontró información para la estación seleccionada.")
 
