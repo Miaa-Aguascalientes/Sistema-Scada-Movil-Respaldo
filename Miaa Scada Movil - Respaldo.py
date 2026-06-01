@@ -927,7 +927,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
             # CSS para ajustar el tamaño de fuente de las métricas (puedes ajustar los px)
             st.markdown("""
                 <style>
-                [data-testid="stMetricValue"] { font-size: 20px !important; }
+                [data-testid="stMetricValue"] { font-size: 40px !important; }
                 [data-testid="stMetricLabel"] { font-size: 14px !important; }
                 </style>
             """, unsafe_allow_html=True)
@@ -945,17 +945,47 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
             st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Histórico: Presión y Nivel de Tanque</h4>", unsafe_allow_html=True)
             fig_rb = go.Figure()
             
+            # Nivel de Tanque (Eje Principal)
             df_n = df_hist[df_hist['TAG'] == tag_n]
-            fig_rb.add_trace(go.Scatter(x=df_n['FECHA'], y=df_n['VALUE'].round(2), name='Nivel (Mts)', line=dict(color='#00d4ff')))
+            fig_rb.add_trace(go.Scatter(
+                x=df_n['FECHA'], y=df_n['VALUE'].round(2), 
+                name='Nivel (Mts)', 
+                mode='lines+markers', # <--- AQUÍ ESTÁ LA CORRECCIÓN
+                line=dict(color='#00d4ff', width=2),
+                marker=dict(size=4)
+            ))
             
+            # Presión (Eje Secundario)
             df_p = df_hist[df_hist['TAG'] == tag_p]
-            fig_rb.add_trace(go.Scatter(x=df_p['FECHA'], y=df_p['VALUE'].round(2), name='Presión (Kg/cm²)', line=dict(color='#00ff00'), yaxis="y2"))
+            fig_rb.add_trace(go.Scatter(
+                x=df_p['FECHA'], y=df_p['VALUE'].round(2), 
+                name='Presión (Kg/cm²)', 
+                mode='lines+markers', # <--- AQUÍ ESTÁ LA CORRECCIÓN
+                line=dict(color='#00ff00', width=2), 
+                marker=dict(size=4),
+                yaxis="y2"
+            ))
             
             fig_rb.update_layout(
-                template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                hovermode="x unified", height=280,
-                yaxis=dict(title="Nivel (m)"), yaxis2=dict(title="Presión (Kg/cm²)", overlaying="y", side="right"),
-                legend=dict(orientation="h", y=1.1), margin=dict(t=40, b=40, l=40, r=40)
+                template="plotly_dark", 
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                hovermode="x unified", 
+                height=280,
+                margin=dict(t=40, b=40, l=20, r=20),
+                yaxis=dict(title="Nivel (m)"), tickformat=".2f"),
+                yaxis2=dict(
+                    title="Presión (Kg/cm²)", 
+                    overlaying="y", 
+                    side="right",
+                    tickformat=".2f"
+                ),
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.2),
+                    xanchor="left",
+                    x=0 
             )
             st.plotly_chart(fig_rb, use_container_width=True)
         else:
