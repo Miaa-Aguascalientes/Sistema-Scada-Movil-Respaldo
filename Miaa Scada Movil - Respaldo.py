@@ -843,7 +843,6 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
 
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
 
-
 elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id != "-- Seleccionar --":
     id_rb = st.session_state.activo_id
     info_rb = mapa_rebombeos_dict.get(id_rb)
@@ -856,6 +855,23 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
         data_scada_rb = cargar_datos_scada([t for t in tags_rb if t])
         p_rb, _ = data_scada_rb.get(info_rb.get('presion'), (0.0, "N/A"))
         n_rb, _ = data_scada_rb.get(info_rb.get('nivel_tanque'), (0.0, "N/A"))
+
+        valor_presion = float(p_rb)
+        if valor_presion < 0.100:
+            estado_texto = "Sistema Apagado"
+            color_estado = "#ff4b4b" # Rojo para apagado
+        else:
+            estado_texto = "Sistema Encendido"
+            color_estado = "#00ff00" # Verde para encendido
+
+# Renderizado del indicador visual (estilo similar al de tu imagen)
+        st.markdown(f"""
+            <div style="border: 2px solid {color_estado}; padding: 10px; border-radius: 5px; text-align: center; margin-bottom: 20px;">
+                <p style="margin: 0; font-size: 12px; color: #888;">ESTADO DEL SISTEMA</p>
+                <h3 style="margin: 0; color: {color_estado};">{estado_texto}</h3>
+                <p style="margin: 0; font-size: 10px; color: #888;">Última actualización: {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
+            </div>
+        """, unsafe_allow_html=True)
         
         rc1, rc2 = st.columns(2)
         rc1.metric("Presión Actual", f"{float(p_rb):.2f} Kg/cm²")
