@@ -926,25 +926,33 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
 
 
             
-            def metric_con_icono_al_lado(label, value, icon, unit):
-                # Título arriba
+            def metric_con_icono_al_lado(label, value, icon, unit, fecha):
+            # Fila 1: Título a la izquierda y Fecha a la derecha
+            col_titulo, col_fecha = st.columns([0.7, 0.3])
+            with col_titulo:
                 st.markdown(f"<p style='font-size: 14px; margin-bottom: 2px; color: #FFFFFF;'>{label}</p>", unsafe_allow_html=True)
-                # Valor + Icono en la misma línea
-                st.markdown(f"<h2 style='margin-top: 0px; font-size: 24px;'>{icon} {value} <span style='font-size: 14px;'>{unit}</span></h2>", unsafe_allow_html=True)
+            with col_fecha:
+                st.markdown(f"<p style='font-size: 10px; margin-bottom: 2px; color: #888888; text-align: right;'>{fecha}</p>", unsafe_allow_html=True)
+            
+            # Fila 2: Valor + Icono
+            st.markdown(f"<h2 style='margin-top: 0px; font-size: 24px;'>{icon} {value} <span style='font-size: 14px;'>{unit}</span></h2>", unsafe_allow_html=True)
 
-           
-            # Renderizado usando tu indexación exacta
-            rc1, rc2 = st.columns(2)
-            with rc1:
-                metric_con_icono_al_lado("Última Presión", f"{float(p_rb):.2f}", "🕛", "Kg/cm²")
-            with rc2:
-                metric_con_icono_al_lado("Último Nivel Tanque", f"{float(n_rb):.2f}", "🛢️", "mts")
+        # Calculamos la fecha una sola vez
+        zona_mexico = ZoneInfo("America/Mexico_City")
+        fecha_str = datetime.now(zona_mexico).strftime('%H:%M:%S')
 
-            rc3, rc4 = st.columns(2)
-            with rc3:
-                metric_con_icono_al_lado("Ajuste de Setpoint Día", f"{float(sp_dia):.2f}", "☀️", "Kg/cm²")
-            with rc4:
-                metric_con_icono_al_lado("Ajuste de Setpoint Noche", f"{float(sp_noche):.2f}", "🌙", "Kg/cm²")
+        # Renderizado usando tu indexación exacta
+        rc1, rc2 = st.columns(2)
+        with rc1:
+            metric_con_icono_al_lado("Presión actual del sistema", f"{float(p_rb):.2f}", "🕛", "Kg/cm²", fecha_str)
+        with rc2:
+            metric_con_icono_al_lado("Último Nivel Tanque", f"{float(n_rb):.2f}", "🛢️", "mts", fecha_str)
+
+        rc3, rc4 = st.columns(2)
+        with rc3:
+            metric_con_icono_al_lado("Ajuste de Setpoint Día", f"{float(sp_dia):.2f}", "☀️", "Kg/cm²", fecha_str)
+        with rc4:
+            metric_con_icono_al
             
             # --- Gráfico ---
             st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Histórico: Presión y Nivel de Tanque</h4>", unsafe_allow_html=True)
