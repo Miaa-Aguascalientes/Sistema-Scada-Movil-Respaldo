@@ -931,6 +931,13 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
                 with c_fecha:
                     st.markdown(f"<p style='font-size: 10px; margin-top: 10px; color: #888888; text-align: right;'>{fecha_completa}</p>", unsafe_allow_html=True)
 
+                    st.markdown(f"""
+                    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 0px;">
+                        <h2 style="margin: 0; font-size: 24px;">{icon} {value} <span style='font-size: 14px;'>{unit}</span></h2>
+                        <p style="margin: 0; font-size: 10px; color: #888888;">{fecha_completa}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+
             # --- Renderizado de Métricas ---
             fecha_completa = datetime.now(ZoneInfo("America/Mexico_City")).strftime('%d/%m/%Y %H:%M')
             
