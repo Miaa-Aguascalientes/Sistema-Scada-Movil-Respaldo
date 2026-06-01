@@ -849,7 +849,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
     info_rb = mapa_rebombeos_dict.get(id_rb)
     
     if info_rb:
-        st.markdown(f"<h3 style='color:#00d4ff;'>🧊 Estación de Rebombeo: {info_rb['nombre']}</h3>", unsafe_allow_html=True)
+        st.markdown(f"<h3 style='color:#00d4ff;'>🧊 Rebombeo: {info_rb['nombre']}</h3>", unsafe_allow_html=True)
         
         # 1. Métricas inmediatas
         tags_rb = [info_rb.get('presion'), info_rb.get('nivel_tanque')]
@@ -910,7 +910,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
             df_n = df_hist[df_hist['TAG'] == tag_n]
             fig_rb.add_trace(go.Scatter(
                 x=df_n['FECHA'], y=df_n['VALUE'].round(2),
-                name='Nivel (m)', mode='lines+markers',
+                name='Nivel (Mts)', mode='lines+markers',
                 line=dict(color='#00d4ff', width=2), marker=dict(size=4)
             ))
             
