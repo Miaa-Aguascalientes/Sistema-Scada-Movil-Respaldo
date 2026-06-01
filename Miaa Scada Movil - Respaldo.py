@@ -951,7 +951,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
             with rc3:
                 metric_con_icono_al_lado("Setpoint Día", f"{float(sp_dia):.2f}", "☀️", "Kg/cm²")
             with rc4:
-                metric_con_icono_al_lado("Setpoint Noche", f"{fl
+                metric_con_icono_al_lado("Setpoint Noche", f"{float(sp_noche):.2f}", "🌙", "Kg/cm²")
             
             # --- Gráfico ---
             st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Histórico: Presión y Nivel de Tanque</h4>", unsafe_allow_html=True)
