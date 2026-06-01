@@ -924,22 +924,27 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
             </div>
         """, unsafe_allow_html=True)
 
-            # CSS para ajustar el tamaño de fuente de las métricas (puedes ajustar los px)
-            st.markdown("""
-                <style>
-                [data-testid="stMetricValue"] { font-size: 30px !important; }
-                [data-testid="stMetricLabel"] { font-size: 14px !important; }
-                </style>
-            """, unsafe_allow_html=True)
+        # Función auxiliar para métricas personalizadas
+        def metric_con_icono(label, value, icon, unit):
+            st.markdown(f"<p style='font-size: 14px; margin-bottom: -10px; color: #888888;'>{label}</p>", unsafe_allow_html=True)
+            col_icon, col_val = st.columns([0.2, 0.8])
+            with col_icon:
+                st.markdown(f"<h2 style='margin-top: 10px;'>{icon}</h2>", unsafe_allow_html=True)
+            with col_val:
+                st.markdown(f"<h2 style='margin-top: 5px; font-size: 24px;'>{value} <span style='font-size: 14px;'>{unit}</span></h2>", unsafe_allow_html=True)
+
+        # --- Métricas (Usando tu indexación exacta) ---
+        rc1, rc2 = st.columns(2)
+        with rc1:
+            metric_con_icono("Última Presión", f"{float(p_rb):.2f}", "🕛", "Kg/cm²")
+        with rc2:
+            metric_con_icono("Último Nivel Tanque", f"{float(n_rb):.2f}", "🛢️", "mts")
             
-            # --- Métricas ---
-            rc1, rc2 = st.columns(2)
-            rc1.metric("🕛 Última Presión", f"{float(p_rb):.2f} Kg/cm²")
-            rc2.metric("🛢️ Último Nivel Tanque", f"{float(n_rb):.2f} mts")
-            
-            rc3, rc4 = st.columns(2)
-            rc3.metric("☀️ Set Point Día", f"{float(sp_dia):.2f} Kg/cm²")
-            rc4.metric("🌙 Set Point Noche", f"{float(sp_noche):.2f} Kg/cm²")
+        rc3, rc4 = st.columns(2)
+        with rc3:
+            metric_con_icono("Setpoint Día", f"{float(sp_dia):.2f}", "☀️", "Kg/cm²")
+        with rc4:
+            metric_con_icono("Setpoint Noche", f"{float(sp_noche):.2f}", "🌙", "Kg/cm²")
             
             # --- Gráfico ---
             st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Histórico: Presión y Nivel de Tanque</h4>", unsafe_allow_html=True)
