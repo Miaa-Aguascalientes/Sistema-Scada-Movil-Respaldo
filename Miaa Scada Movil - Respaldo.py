@@ -856,41 +856,51 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
     if info_rb:
         st.markdown(f"<h3 style='color:#00d4ff;'>🧊 Rebombeo: {info_rb['nombre']}</h3>", unsafe_allow_html=True)
         
-        # 1. Métricas inmediatas
-        tags_rb = [info_rb.get('presion'), info_rb.get('nivel_tanque')]
-        data_scada_rb = cargar_datos_scada([t for t in tags_rb if t])
-        p_rb, _ = data_scada_rb.get(info_rb.get('presion'), (0.0, "N/A"))
-        n_rb, _ = data_scada_rb.get(info_rb.get('nivel_tanque'), (0.0, "N/A"))
-        sp_dia, _ = data_scada_rb.get(info_rb.get('setpoint_dia'), (0.0, "N/A")) # Traer setpoint_dia
-        sp_noche, _ = data_scada_rb.get(info_rb.get('setpoint_noche'), (0.0, "N/A")) # Traer setpoint_noche
-
-        zona_mexico = ZoneInfo("America/Mexico_City")
-        fecha_actual = datetime.now(zona_mexico).strftime('%d/%m/%Y %H:%M')
+        # 1. Obtener ÚLTIMOS VALORES registrados desde la DB (Histórico)
+        engine = get_mysql_scada_engine()
+        tags_a_consultar = [info_rb.get('presion'), info_rb.get('nivel_tanque'), 
+                           info_rb.get('setpoint_dia'), info_rb.get('setpoint_noche')]
+        # Filtramos posibles None
+        tags_validos = [t for t in tags_a_consultar if t]
+        tags_in_clause = ",".join([f"'{t}'" for t in tags_validos])
         
-        valor_presion = float(p_rb)
-        if valor_presion < 0.100:
-            estado_texto = "Sistema Apagado"
-            color_estado = "#ff4b4b" # Rojo para apagado
-        else:
-            estado_texto = "Sistema Encendido"
-            color_estado = "#00ff00" # Verde para encendido
+        # Consulta para el último valor de cada tag
+        query_ultimos = f"""
+            SELECT r.NAME as TAG, h.VALUE
+            FROM vfitagnumhistory h
+            JOIN VfiTagRef r ON h.GATEID = r.GATEID
+            WHERE r.NAME IN ({tags_in_clause})
+            AND h.FECHA = (SELECT MAX(h2.FECHA) FROM vfitagnumhistory h2 WHERE h2.GATEID = h.GATEID)
+        """
+        df_ultimos = pd.read_sql(query_ultimos, engine)
+        mapa_valores = dict(zip(df_ultimos['TAG'], df_ultimos['VALUE']))
+        
+        p_rb = mapa_valores.get(info_rb.get('presion'), 0.0)
+        n_rb = mapa_valores.get(info_rb.get('nivel_tanque'), 0.0)
+        sp_dia = mapa_valores.get(info_rb.get('setpoint_dia'), 0.0)
+        sp_noche = mapa_valores.get(info_rb.get('setpoint_noche'), 0.0)
 
-# Renderizado del indicador visual (estilo similar al de tu imagen)
+        # Estado del sistema (basado en la presión obtenida de la DB)
+        valor_presion = float(p_rb)
+        estado_texto = "Sistema Encendido" if valor_presion >= 0.100 else "Sistema Apagado"
+        color_estado = "#00ff00" if valor_presion >= 0.100 else "#ff4b4b"
+        
         st.markdown(f"""
-            <div style="border: 2px solid {color_estado}; padding: 10px; border-radius: 10px; text-align: center; margin-bottom: 20px; line-height: 1.2;">
-                <p style="margin: 0; font-size: 12px; color: #FFFFFF; padding-bottom: 0px;">ESTADO DEL SISTEMA</p>
+            <div style="border: 2px solid {color_estado}; padding: 10px; border-radius: 10px; text-align: center; margin-bottom: 20px;">
+                <p style="margin: 0; font-size: 12px; color: #FFFFFF;">ESTADO DEL SISTEMA</p>
                 <h3 style="margin: 0; color: {color_estado};">{estado_texto}</h3>
-                <p style="margin: 0; font-size: 12px; color: #FFFFFF; padding-top: 0px;">Última actualización: {fecha_actual}</p>
             </div>
         """, unsafe_allow_html=True)
         
+        # Métricas (Fila 1)
         rc1, rc2 = st.columns(2)
-        rc1.metric("🕛 Presión Actual", f"{float(p_rb):.2f} Kg/cm²")
-        rc2.metric("🛢️ Nivel actual de Tanque", f"{float(n_rb):.2f} mts")
+        rc1.metric("🕛 Última Presión", f"{float(p_rb):.2f} Kg/cm²")
+        rc2.metric("🛢️ Último Nivel Tanque", f"{float(n_rb):.2f} mts")
+        
+        # Setpoints (Fila 2 - Debajo de los anteriores)
         rc3, rc4 = st.columns(2)
-        # Se asume que los setpoints son también en mts, como el nivel del tanque
-        rc3.metric("☀️ Set Point Día (actual)", f"{float(sp_dia):.2f} kg/cm2")
-        rc4.metric("🌙 Set Point Noche (actual)", f"{float(sp_noche):.2f} kg/cm2")
+        rc3.metric("☀️ Set Point Día", f"{float(sp_dia):.2f} mts")
+        rc4.metric("🌙 Set Point Noche", f"{float(sp_noche):.2f} mts")
         # -------------------------------------------------------------------------
         
         # 2. Selector de Rango de Fechas
