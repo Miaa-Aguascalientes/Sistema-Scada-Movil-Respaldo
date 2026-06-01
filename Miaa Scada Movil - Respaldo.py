@@ -927,7 +927,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
 
             
             # --- Métricas ---
-            def metric_con_icono_al_lado(label, value, icon, unit, fecha_completa):
+        def metric_con_icono_al_lado(label, value, icon, unit, fecha_completa):
             # Fila 1: Título solamente
             st.markdown(f"<p style='font-size: 14px; margin-bottom: 2px; color: #FFFFFF;'>{label}</p>", unsafe_allow_html=True)
             
