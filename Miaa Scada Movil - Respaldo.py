@@ -867,21 +867,23 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
         opcion_fecha = st.selectbox("Rango de tiempo:", opciones, index=0, key="sel_rango_rb")
         
         hoy_dt = datetime.now()
+        f_fin = hoy_dt
         if opcion_fecha == "Hoy": f_ini = hoy_dt.replace(hour=0, minute=0, second=0, microsecond=0)
-        elif opcion_fecha == "Ayer": f_ini = hoy_dt - timedelta(days=1)
+        elif opcion_fecha == "Ayer": 
+            f_ini = (hoy_dt - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            f_fin = hoy_dt.replace(hour=0, minute=0, second=0, microsecond=0)
         elif opcion_fecha == "Últimos 7 días": f_ini = hoy_dt - timedelta(days=7)
         elif opcion_fecha == "Últimos 14 días": f_ini = hoy_dt - timedelta(days=14)
         elif opcion_fecha == "Este Mes": f_ini = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        elif opcion_fecha == "Último Mes":primer_dia_actual = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        f_ini = (primer_dia_actual - timedelta(days=1)).replace(day=1)
-        f_fin = primer_dia_actual - timedelta(seconds=1)
-    elif opcion_fecha == "Últimos 6 meses":
-        f_ini = hoy_dt - timedelta(days=180)    
+        elif opcion_fecha == "Último Mes":
+            primer_dia_actual = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            f_ini = (primer_dia_actual - timedelta(days=1)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            f_fin = primer_dia_actual - timedelta(seconds=1)
+        elif opcion_fecha == "Últimos 6 meses": f_ini = hoy_dt - timedelta(days=180)
         else:
             rango = st.date_input("Selecciona rango:", [hoy_dt - timedelta(days=7), hoy_dt], key="date_rb")
-            f_ini = rango[0] if len(rango) == 2 else hoy_dt - timedelta(days=7)
-        
-        f_fin = hoy_dt
+            f_ini = pd.to_datetime(rango[0]) if len(rango) == 2 else hoy_dt - timedelta(days=7)
+            if len(rango) == 2: f_fin = pd.to_datetime(rango[1]).replace(hour=23, minute=59, second=59)
         
         # 3. Consulta de Histórico (Ahora todo está dentro del bloque if info_rb)
         st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Histórico: Presión y Nivel de Succión</h4>", unsafe_allow_html=True)
