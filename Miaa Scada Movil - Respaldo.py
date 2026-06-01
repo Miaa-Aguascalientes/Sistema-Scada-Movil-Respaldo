@@ -859,7 +859,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
         
         rc1, rc2 = st.columns(2)
         rc1.metric("Presión Actual", f"{float(p_rb):.2f} Kg/cm²")
-        rc2.metric("Nivel de Succión", f"{float(n_rb):.2f} mts")
+        rc2.metric("Nivel actual de Tanque", f"{float(n_rb):.2f} mts")
         
         # 2. Selector de Rango de Fechas
         st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Configuración de Histórico</h4>", unsafe_allow_html=True)
@@ -900,37 +900,44 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
             
             fig_rb = go.Figure()
             
-            # Trazas
-            df_p = df_hist[df_hist['TAG'] == tag_p]
-            fig_rb.add_trace(go.Scatter(
-                x=df_p['FECHA'], y=df_p['VALUE'].round(2),
-                name='Presión (Kg/cm²)', mode='lines+markers',
-                line=dict(color='#00ff00', width=2), marker=dict(size=4)
-            ))
-            
+            # Nivel de Tanque -> Eje Principal (Izquierda)
             df_n = df_hist[df_hist['TAG'] == tag_n]
             fig_rb.add_trace(go.Scatter(
                 x=df_n['FECHA'], y=df_n['VALUE'].round(2),
                 name='Nivel (m)', mode='lines+markers',
-                line=dict(color='#00ff00', width=2), marker=dict(size=4)
+                line=dict(color='#00d4ff', width=2), marker=dict(size=4)
             ))
             
+            # Presión -> Eje Secundario (Derecha)
+            df_p = df_hist[df_hist['TAG'] == tag_p]
+            fig_rb.add_trace(go.Scatter(
+                x=df_p['FECHA'], y=df_p['VALUE'].round(2),
+                name='Presión (Kg/cm²)', mode='lines+markers',
+                line=dict(color='#00ff00', width=2), marker=dict(size=4),
+                yaxis="y2" # Se asigna al eje Y secundario
+            ))
+            
+            # Configuración de ejes
             fig_rb.update_layout(
                 template="plotly_dark",
                 paper_bgcolor='rgba(0,0,0,0)',
                 plot_bgcolor='rgba(0,0,0,0)',
                 hovermode="x unified",
-                yaxis=dict(tickformat=".2f"),
+                # Eje primario (Izquierda - Nivel)
+                yaxis=dict(title="Nivel (m)", tickformat=".2f"),
+                # Eje secundario (Derecha - Presión)
+                yaxis2=dict(
+                    title="Presión (Kg/cm²)",
+                    overlaying="y",
+                    side="right",
+                    tickformat=".2f"
+                ),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                margin=dict(l=0, r=0, t=30, b=0)
+                margin=dict(l=40, r=40, t=30, b=0)
             )
+            
             fig_rb.update_traces(hovertemplate="%{y:.2f}")
             st.plotly_chart(fig_rb, use_container_width=True)
-        else:
-            st.info("No hay datos históricos disponibles para el periodo seleccionado.")
-    else:
-        st.error("Error: No se encontró información para la estación seleccionada.")
-
 # ------------------------------------------------------------------------------ seccion de sectores ------------------------------------------------------------------------
 
 elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != "-- Seleccionar --":
