@@ -919,8 +919,15 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
                 val = ultimos.loc[val_tag, 'VALUE'] if val_tag in ultimos.index else 0
                 fecha_obj = ultimos.loc[val_tag, 'FECHA'] if val_tag in ultimos.index else None
                 
-                # %d: día, %B: mes completo (ej: Junio), %Y: año, %H:%M: hora
-                fecha_str = fecha_obj.strftime('%d/%B/%Y %H:%M') if fecha_obj else "N/A"
+                if fecha_obj:
+                    meses = {
+                        1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio",
+                        7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
+                    }
+                    mes_nombre = meses[fecha_obj.month]
+                    fecha_str = f"{fecha_obj.day:02d}/{mes_nombre}/{fecha_obj.year} {fecha_obj.strftime('%H:%M')}"
+                else:
+                    fecha_str = "N/A"
                 
                 st.markdown("<hr style='border: 0; border-top: 1px solid #FFFFFF; margin: 10px 0;'>", unsafe_allow_html=True)
                 st.markdown(f"<p style='font-size: 14px; margin-bottom: 2px; color: #FFFFFF; text-align: center;'>{label}</p>", unsafe_allow_html=True)
