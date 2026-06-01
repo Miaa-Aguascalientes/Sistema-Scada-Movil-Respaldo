@@ -923,9 +923,8 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
                 paper_bgcolor='rgba(0,0,0,0)',
                 plot_bgcolor='rgba(0,0,0,0)',
                 hovermode="x unified",
-                # Eje primario (Izquierda - Nivel)
+                height=300,  # <--- AJUSTA ESTE VALOR (ej. 250 a 350 es ideal para móvil)
                 yaxis=dict(title="Nivel (m)", tickformat=".2f"),
-                # Eje secundario (Derecha - Presión)
                 yaxis2=dict(
                     title="Presión (Kg/cm²)",
                     overlaying="y",
