@@ -924,22 +924,21 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
 
             # --- Función de Métricas ---
             def metric_con_icono_al_lado(label, value, icon, unit, fecha_completa):
-                st.markdown(f"<p style='font-size: 14px; margin-bottom: 2px; color: #FFFFFF;'>{label}</p>", unsafe_allow_html=True)
+                st.markdown(f"<p style='font-size: 14px; margin-bottom: 2px; color: #FFFFFF; text-align: center;'>{label}</p>", unsafe_allow_html=True)
                 st.markdown(f"""
-                <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 15px;">
+                <div style="display: flex; justify-content: center; align-items: baseline; gap: 15px; margin-bottom: 25px;">
                     <h2 style="margin: 0; font-size: 24px;">{icon} {value} <span style='font-size: 14px;'>{unit}</span></h2>
                     <p style="margin: 0; font-size: 10px; color: #888888;">{fecha_completa}</p>
                 </div>
                 """, unsafe_allow_html=True)
 
-            # --- Renderizado de Métricas ---
-            c1, c2 = st.columns(2)
-            with c1:
-                metric_con_icono_al_lado("Presión actual", f"{float(p_rb):.2f}", "🕛", "Kg/cm²", fecha_actual)
-                metric_con_icono_al_lado("Setpoint Día", f"{float(sp_dia):.2f}", "☀️", "Kg/cm²", fecha_actual)
-            with c2:
-                metric_con_icono_al_lado("Nivel Tanque", f"{float(n_rb):.2f}", "🛢️", "mts", fecha_actual)
-                metric_con_icono_al_lado("Setpoint Noche", f"{float(sp_noche):.2f}", "🌙", "Kg/cm²", fecha_actual)
+            # --- Renderizado de Métricas (sin columnas para permitir centrado total) ---
+            fecha_actual = datetime.now(ZoneInfo("America/Mexico_City")).strftime('%d/%m/%Y %H:%M')
+            
+            metric_con_icono_al_lado("Presión actual", f"{float(p_rb):.2f}", "🕛", "Kg/cm²", fecha_actual)
+            metric_con_icono_al_lado("Nivel Tanque", f"{float(n_rb):.2f}", "🛢️", "mts", fecha_actual)
+            metric_con_icono_al_lado("Setpoint Día", f"{float(sp_dia):.2f}", "☀️", "Kg/cm²", fecha_actual)
+            metric_con_icono_al_lado("Setpoint Noche", f"{float(sp_sn):.2f}", "🌙", "Kg/cm²", fecha_actual)
             
             # --- Gráfico ---
             st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Histórico: Presión y Nivel de Tanque</h4>", unsafe_allow_html=True)
