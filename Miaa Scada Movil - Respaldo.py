@@ -350,11 +350,12 @@ def cargar_rebombeos_desde_db():
     engine = get_mysql_telemetria_engine()
     if not engine: return {}
     try:
+        # Asegúrate de que tu consulta SELECT incluya estos nuevos campos. 
+        # Si usas "SELECT *", ya deberían estar disponibles en el DataFrame.
         df_rb = pd.read_sql("SELECT * FROM Diccionario_de_rebombeos", engine)
         nuevo_mapa_rb = {}
         
-        # Filtramos solo los que tienen telemetria antes de mapear
-        # .str.strip() ayuda a eliminar espacios accidentales
+        # Filtramos solo los que tienen telemetria
         df_filtrado = df_rb[df_rb['Telemetria'].str.strip() == "Con telemetria"]
         
         for _, row in df_filtrado.iterrows():
@@ -364,7 +365,10 @@ def cargar_rebombeos_desde_db():
                 "presion": row['presion'], 
                 "nivel_tanque": row['nivel_tanque'],
                 "voltajes_l": [row['voltaje_L1'], row['voltaje_L2'], row['voltaje_L3']],
-                "amperajes_l": [row['amperaje_L1'], row['amperaje_L2'], row['amperaje_L3']]
+                "amperajes_l": [row['amperaje_L1'], row['amperaje_L2'], row['amperaje_L3']],
+                # Nuevos campos integrados
+                "setpoint_dia": row['setpoint_dia'],
+                "setpoint_noche": row['setpoint_noche']
             }
         return nuevo_mapa_rb
     except Exception as e:
@@ -857,6 +861,8 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
         data_scada_rb = cargar_datos_scada([t for t in tags_rb if t])
         p_rb, _ = data_scada_rb.get(info_rb.get('presion'), (0.0, "N/A"))
         n_rb, _ = data_scada_rb.get(info_rb.get('nivel_tanque'), (0.0, "N/A"))
+        sp_dia, _ = data_scada_rb.get(info_rb.get('setpoint_dia'), (0.0, "N/A")) # Traer setpoint_dia
+        sp_noche, _ = data_scada_rb.get(info_rb.get('setpoint_noche'), (0.0, "N/A")) # Traer setpoint_noche
 
         zona_mexico = ZoneInfo("America/Mexico_City")
         fecha_actual = datetime.now(zona_mexico).strftime('%d/%m/%Y %H:%M')
@@ -881,6 +887,11 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
         rc1, rc2 = st.columns(2)
         rc1.metric("🕛 Presión Actual", f"{float(p_rb):.2f} Kg/cm²")
         rc2.metric("🛢️ Nivel actual de Tanque", f"{float(n_rb):.2f} mts")
+        rc3, rc4 = st.columns(2)
+        # Se asume que los setpoints son también en mts, como el nivel del tanque
+        rc3.metric("☀️ Set Point Día (actual)", f"{float(sp_dia):.2f} kg/cm2")
+        rc4.metric("🌙 Set Point Noche (actual)", f"{float(sp_noche):.2f} kg/cm2")
+        # -------------------------------------------------------------------------
         
         # 2. Selector de Rango de Fechas
         opciones = ["Hoy", "Ayer", "Últimos 7 días", "Últimos 14 días", "Este Mes", "Último Mes", "Últimos 6 meses", "Personalizado"]
