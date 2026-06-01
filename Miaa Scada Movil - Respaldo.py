@@ -914,11 +914,12 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
             color_estado = "#00ff00" if float(p_rb) >= 0.100 else "#ff4b4b"
             
             st.markdown(f"""
-                <div style="border: 2px solid {color_estado}; padding: 10px; border-radius: 10px; text-align: center; margin-bottom: 20px;">
-                    <p style="margin: 0; font-size: 12px; color: #FFFFFF;">ESTADO DEL SISTEMA</p>
-                    <h3 style="margin: 0; color: {color_estado};">{estado_texto}</h3>
-                </div>
-            """, unsafe_allow_html=True)
+            <div style="border: 2px solid {color_estado}; padding: 10px; border-radius: 10px; text-align: center; margin-bottom: 20px;">
+                <p style="margin: 0; font-size: 12px; color: #FFFFFF;">ESTADO DEL SISTEMA</p>
+                <h3 style="margin: 0; color: {color_estado};">{estado_texto}</h3>
+                <p style="margin: 0; font-size: 10px; color: #FFFFFF;">Última actualización: {fecha_actual}</p>
+            </div>
+        """, unsafe_allow_html=True)
             
             # --- Métricas ---
             rc1, rc2 = st.columns(2)
