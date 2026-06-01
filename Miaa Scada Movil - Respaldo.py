@@ -972,6 +972,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
                 plot_bgcolor='rgba(0,0,0,0)',
                 hovermode="x unified", 
                 height=280,
+                
                 margin=dict(t=40, b=40, l=20, r=20),
                 yaxis=dict(title="Nivel (m)"), tickformat=".2f"),
                 yaxis2=dict(
@@ -985,7 +986,8 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
                     yanchor="bottom",
                     y=1.2),
                     xanchor="left",
-                    x=0 
+                    x=0
+                )
             )
             st.plotly_chart(fig_rb, use_container_width=True)
         else:
