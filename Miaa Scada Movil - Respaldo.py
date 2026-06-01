@@ -856,43 +856,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
     if info_rb:
         st.markdown(f"<h3 style='color:#00d4ff;'>🧊 Rebombeo: {info_rb['nombre']}</h3>", unsafe_allow_html=True)
         
-        # 1. Obtener ÚLTIMOS VALORES registrados desde la DB (Histórico)
-        engine = get_mysql_scada_engine()
-        tags_a_consultar = [info_rb.get('presion'), info_rb.get('nivel_tanque'), 
-                           info_rb.get('setpoint_dia'), info_rb.get('setpoint_noche')]
-        # Filtramos posibles None
-        tags_validos = [t for t in tags_a_consultar if t]
-        tags_in_clause = ",".join([f"'{t}'" for t in tags_validos])
-                
-        p_rb = mapa_valores.get(info_rb.get('presion'), 0.0)
-        n_rb = mapa_valores.get(info_rb.get('nivel_tanque'), 0.0)
-        sp_dia = mapa_valores.get(info_rb.get('setpoint_dia'), 0.0)
-        sp_noche = mapa_valores.get(info_rb.get('setpoint_noche'), 0.0)
-
-        # Estado del sistema (basado en la presión obtenida de la DB)
-        valor_presion = float(p_rb)
-        estado_texto = "Sistema Encendido" if valor_presion >= 0.100 else "Sistema Apagado"
-        color_estado = "#00ff00" if valor_presion >= 0.100 else "#ff4b4b"
-        
-        st.markdown(f"""
-            <div style="border: 2px solid {color_estado}; padding: 10px; border-radius: 10px; text-align: center; margin-bottom: 20px;">
-                <p style="margin: 0; font-size: 12px; color: #FFFFFF;">ESTADO DEL SISTEMA</p>
-                <h3 style="margin: 0; color: {color_estado};">{estado_texto}</h3>
-            </div>
-        """, unsafe_allow_html=True)
-        
-        # Métricas (Fila 1)
-        rc1, rc2 = st.columns(2)
-        rc1.metric("🕛 Última Presión", f"{float(p_rb):.2f} Kg/cm²")
-        rc2.metric("🛢️ Último Nivel Tanque", f"{float(n_rb):.2f} mts")
-        
-        # Setpoints (Fila 2 - Debajo de los anteriores)
-        rc3, rc4 = st.columns(2)
-        rc3.metric("☀️ Set Point Día", f"{float(sp_dia):.2f} Kg/cm²")
-        rc4.metric("🌙 Set Point Noche", f"{float(sp_noche):.2f} Kg/cm²")
-        # -------------------------------------------------------------------------
-        
-        # 2. Selector de Rango de Fechas
+        # 1. Selector de Rango de Fechas (necesario primero para definir la consulta)
         opciones = ["Hoy", "Ayer", "Últimos 7 días", "Últimos 14 días", "Este Mes", "Último Mes", "Últimos 6 meses", "Personalizado"]
         opcion_fecha = st.selectbox("Rango de tiempo:", opciones, index=2, key="sel_rango_rb")
         
@@ -914,18 +878,14 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
             rango = st.date_input("Selecciona rango:", [hoy_dt - timedelta(days=7), hoy_dt], key="date_rb")
             f_ini = pd.to_datetime(rango[0]) if len(rango) == 2 else hoy_dt - timedelta(days=7)
             if len(rango) == 2: f_fin = pd.to_datetime(rango[1]).replace(hour=23, minute=59, second=59)
-        
-        # 3. Consulta de Histórico (Ahora todo está dentro del bloque if info_rb)
-     
-        st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Histórico: Presión y Nivel de Tanque</h4>", unsafe_allow_html=True)
-        
+
+        # 2. ÚNICA CONSULTA a la base de datos
         engine = get_mysql_scada_engine()
         tag_p = info_rb.get('presion')
         tag_n = info_rb.get('nivel_tanque')
         tag_sd = info_rb.get('setpoint_dia')
         tag_sn = info_rb.get('setpoint_noche')
         
-        # Consultamos todos los tags necesarios para el gráfico y los indicadores
         tags_todos = [t for t in [tag_p, tag_n, tag_sd, tag_sn] if t]
         tags_str = ",".join([f"'{t}'" for t in tags_todos])
         
@@ -942,52 +902,52 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
         if not df_hist.empty:
             df_hist['FECHA'] = pd.to_datetime(df_hist['FECHA'])
             
+            # --- Extracción de últimos valores para indicadores ---
+            ultimos_valores = df_hist.groupby('TAG')['VALUE'].last()
+            p_rb = ultimos_valores.get(tag_p, 0.0)
+            n_rb = ultimos_valores.get(tag_n, 0.0)
+            sp_dia = ultimos_valores.get(tag_sd, 0.0)
+            sp_noche = ultimos_valores.get(tag_sn, 0.0)
+
+            # --- Renderizado de Estado ---
+            estado_texto = "Sistema Encendido" if float(p_rb) >= 0.100 else "Sistema Apagado"
+            color_estado = "#00ff00" if float(p_rb) >= 0.100 else "#ff4b4b"
+            
+            st.markdown(f"""
+                <div style="border: 2px solid {color_estado}; padding: 10px; border-radius: 10px; text-align: center; margin-bottom: 20px;">
+                    <p style="margin: 0; font-size: 12px; color: #FFFFFF;">ESTADO DEL SISTEMA</p>
+                    <h3 style="margin: 0; color: {color_estado};">{estado_texto}</h3>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            # --- Métricas ---
+            rc1, rc2 = st.columns(2)
+            rc1.metric("🕛 Última Presión", f"{float(p_rb):.2f} Kg/cm²")
+            rc2.metric("🛢️ Último Nivel Tanque", f"{float(n_rb):.2f} mts")
+            
+            rc3, rc4 = st.columns(2)
+            rc3.metric("☀️ Set Point Día", f"{float(sp_dia):.2f} Kg/cm²")
+            rc4.metric("🌙 Set Point Noche", f"{float(sp_noche):.2f} Kg/cm²")
+            
+            # --- Gráfico ---
+            st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Histórico: Presión y Nivel de Tanque</h4>", unsafe_allow_html=True)
             fig_rb = go.Figure()
             
-            # Nivel de Tanque -> Eje Principal (Izquierda)
             df_n = df_hist[df_hist['TAG'] == tag_n]
-            fig_rb.add_trace(go.Scatter(
-                x=df_n['FECHA'], y=df_n['VALUE'].round(2),
-                name='Nivel (Mts)', mode='lines+markers',
-                line=dict(color='#00d4ff', width=2), marker=dict(size=4)
-            ))
+            fig_rb.add_trace(go.Scatter(x=df_n['FECHA'], y=df_n['VALUE'].round(2), name='Nivel (Mts)', line=dict(color='#00d4ff')))
             
-            # Presión -> Eje Secundario (Derecha)
             df_p = df_hist[df_hist['TAG'] == tag_p]
-            fig_rb.add_trace(go.Scatter(
-                x=df_p['FECHA'], y=df_p['VALUE'].round(2),
-                name='Presión (Kg/cm²)', mode='lines+markers',
-                line=dict(color='#00ff00', width=2), marker=dict(size=4),
-                yaxis="y2" # Se asigna al eje Y secundario
-            ))
+            fig_rb.add_trace(go.Scatter(x=df_p['FECHA'], y=df_p['VALUE'].round(2), name='Presión (Kg/cm²)', line=dict(color='#00ff00'), yaxis="y2"))
             
-            # Configuración de ejes
             fig_rb.update_layout(
-                template="plotly_dark",
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)',
-                hovermode="x unified",
-                height=280,  # Ajuste de altura para móvil
-                yaxis=dict(title="Nivel (m)", tickformat=".2f"),
-                yaxis2=dict(
-                    title="Presión (Kg/cm²)",
-                    overlaying="y",
-                    side="right",
-                    tickformat=".2f"
-                ),
-                # Leyenda a la izquierda
-                legend=dict(
-                    orientation="h", 
-                    yanchor="bottom", 
-                    y=1.02, 
-                    xanchor="left", # Anclaje al lado izquierdo
-                    x=0             # Posición 0 (izquierda)
-                ),
-                margin=dict(t=40, b=40, l=40, r=0),
+                template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                hovermode="x unified", height=280,
+                yaxis=dict(title="Nivel (m)"), yaxis2=dict(title="Presión (Kg/cm²)", overlaying="y", side="right"),
+                legend=dict(orientation="h", y=1.1), margin=dict(t=40, b=40, l=40, r=40)
             )
-            
-            fig_rb.update_traces(hovertemplate="%{y:.2f}")
             st.plotly_chart(fig_rb, use_container_width=True)
+        else:
+            st.warning("No hay datos históricos para el rango seleccionado.")
 # ------------------------------------------------------------------------------ seccion de sectores ------------------------------------------------------------------------
 
 elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != "-- Seleccionar --":
