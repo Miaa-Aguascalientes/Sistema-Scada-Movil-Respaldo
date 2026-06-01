@@ -844,14 +844,14 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
 
 
-if st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id != "-- Seleccionar --":
-    # Usamos el mapa cargado arriba
-    info_rb = mapa_rebombeos_dict.get(st.session_state.activo_id)
+elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id != "-- Seleccionar --":
+    id_rb = st.session_state.activo_id
+    info_rb = mapa_rebombeos_dict.get(id_rb)
     
     if info_rb:
         st.markdown(f"<h3 style='color:#00d4ff;'>🧊 Estación de Rebombeo: {info_rb['nombre']}</h3>", unsafe_allow_html=True)
         
-        # ... (aquí va el resto de tu lógica de métricas y gráficos que ya tenías)
+        # 1. Métricas inmediatas
         tags_rb = [info_rb.get('presion'), info_rb.get('nivel_tanque')]
         data_scada_rb = cargar_datos_scada([t for t in tags_rb if t])
         p_rb, _ = data_scada_rb.get(info_rb.get('presion'), (0.0, "N/A"))
@@ -861,13 +861,42 @@ if st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id != 
         rc1.metric("Presión Actual", f"{float(p_rb):.2f} Kg/cm²")
         rc2.metric("Nivel de Succión", f"{float(n_rb):.2f} m")
         
-        # Gráfico histórico
-        st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Histórico de Presión (Últimos 7 días)</h4>", unsafe_allow_html=True)
-        df_p_rb = obtener_historia_7_dias(info_rb.get('presion'))
+        # 2. Selector de Rango de Fechas
+        st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Configuración de Histórico</h4>", unsafe_allow_html=True)
+        opciones = ["Últimos 7 días", "Hoy", "Ayer", "Últimos 14 días", "Este Mes", "Personalizado"]
+        opcion_fecha = st.selectbox("Rango de tiempo:", opciones, index=0, key="sel_rango_rb")
         
-        if df_p_rb is not None and not df_p_rb.empty:
+        hoy_dt = datetime.now()
+        if opcion_fecha == "Hoy": f_ini = hoy_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        elif opcion_fecha == "Ayer": f_ini = hoy_dt - timedelta(days=1)
+        elif opcion_fecha == "Últimos 7 días": f_ini = hoy_dt - timedelta(days=7)
+        elif opcion_fecha == "Últimos 14 días": f_ini = hoy_dt - timedelta(days=14)
+        elif opcion_fecha == "Este Mes": f_ini = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        else: # Personalizado
+            rango = st.date_input("Selecciona rango:", [hoy_dt - timedelta(days=7), hoy_dt], key="date_rb")
+            f_ini = rango[0] if len(rango) == 2 else hoy_dt - timedelta(days=7)
+        
+        f_fin = hoy_dt # Fecha fin siempre es ahora
+        
+        # 3. Consulta de Histórico con Filtro de Fecha
+        st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Histórico de Presión</h4>", unsafe_allow_html=True)
+        
+        engine = get_mysql_scada_engine()
+        tag_p = info_rb.get('presion')
+        
+        query = f"""
+            SELECT h.FECHA, h.VALUE 
+            FROM vfitagnumhistory h
+            JOIN VfiTagRef r ON h.GATEID = r.GATEID
+            WHERE r.NAME = '{tag_p}'
+            AND h.FECHA BETWEEN '{f_ini.strftime('%Y-%m-%d %H:%M:%S')}' AND '{f_fin.strftime('%Y-%m-%d %H:%M:%S')}'
+            ORDER BY h.FECHA ASC
+        """
+        df_p_rb = pd.read_sql(query, engine)
+        
+        if not df_p_rb.empty:
             fig_rb = go.Figure(go.Scatter(
-                x=df_p_rb['FECHA'], 
+                x=pd.to_datetime(df_p_rb['FECHA']), 
                 y=df_p_rb['VALUE'], 
                 mode='lines', 
                 line=dict(color='#00ff00', width=2)
