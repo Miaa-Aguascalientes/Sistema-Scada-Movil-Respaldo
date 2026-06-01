@@ -849,13 +849,6 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
 
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
 
-Entiendo perfectamente. Para que no tengas que reconstruir nada ni perder ninguna parte de tu lógica anterior, he integrado toda la sección de rebombeos en un solo bloque.
-
-Este bloque incluye la lógica de fechas, la consulta SQL, el renderizado del estado, la función de métricas (con los iconos grandes, las líneas divisorias y las fechas reales de la base de datos), y el gráfico.
-
-Copia y reemplaza todo el bloque de código desde elif st.session_state.activo_tipo == "Rebombeo" ... hasta el final del else del gráfico:
-
-Python
 elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id != "-- Seleccionar --":
     id_rb = st.session_state.activo_id
     info_rb = mapa_rebombeos_dict.get(id_rb)
