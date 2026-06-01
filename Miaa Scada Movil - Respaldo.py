@@ -941,7 +941,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
             metric_con_icono_al_lado("Presión actual", f"{float(p_rb):.2f}", "🕛", "Kg/cm²", fecha_actual)
             metric_con_icono_al_lado("Nivel Tanque", f"{float(n_rb):.2f}", "🛢️", "mts", fecha_actual)
             metric_con_icono_al_lado("Setpoint Día", f"{float(sp_dia):.2f}", "☀️", "Kg/cm²", fecha_actual)
-            metric_con_icono_al_lado("Set
+            metric_con_icono_al_lado("Setpoint Noche", f"{float(sp_noche):.2f}", "🌙", "Kg/cm²", fecha_actual)
             # --- Gráfico ---
             st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Histórico: Presión y Nivel de Tanque</h4>", unsafe_allow_html=True)
             fig_rb = go.Figure()
