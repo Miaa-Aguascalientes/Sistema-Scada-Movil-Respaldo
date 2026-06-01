@@ -879,8 +879,8 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
         """, unsafe_allow_html=True)
         
         rc1, rc2 = st.columns(2)
-        rc1.metric("Presión Actual", f"{float(p_rb):.2f} Kg/cm²")
-        rc2.metric("Nivel actual de Tanque", f"{float(n_rb):.2f} mts")
+        rc1.metric("⚙️ Presión Actual", f"{float(p_rb):.2f} Kg/cm²")
+        rc2.metric("🟦 Nivel actual de Tanque", f"{float(n_rb):.2f} mts")
         
         # 2. Selector de Rango de Fechas
         opciones = ["Hoy", "Ayer", "Últimos 7 días", "Últimos 14 días", "Este Mes", "Último Mes", "Últimos 6 meses", "Personalizado"]
