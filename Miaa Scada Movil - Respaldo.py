@@ -8,6 +8,8 @@ from datetime import datetime, timedelta
 import plotly.graph_objects as go
 import time
 import pytz
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 # Configuración de página optimizada para móviles
 st.set_page_config(
@@ -856,6 +858,9 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
         p_rb, _ = data_scada_rb.get(info_rb.get('presion'), (0.0, "N/A"))
         n_rb, _ = data_scada_rb.get(info_rb.get('nivel_tanque'), (0.0, "N/A"))
 
+        zona_mexico = ZoneInfo("America/Mexico_City")
+        fecha_actual = datetime.now(zona_mexico).strftime('%d/%m/%Y %H:%M')
+        
         valor_presion = float(p_rb)
         if valor_presion < 0.100:
             estado_texto = "Sistema Apagado"
