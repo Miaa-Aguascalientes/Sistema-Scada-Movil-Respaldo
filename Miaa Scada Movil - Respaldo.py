@@ -930,11 +930,11 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
                     fecha_str = "N/A"
                 
                 st.markdown("<hr style='border: 0; border-top: 1px solid #FFFFFF; margin: 10px 0;'>", unsafe_allow_html=True)
-                st.markdown(f"<p style='font-size: 14px; margin-bottom: 2px; color: #FFFFFF; text-align: center;'>{label}</p>", unsafe_allow_html=True)
+                st.markdown(f"<p style='font-size: 18px; margin-bottom: 2px; color: #FFFFFF; text-align: center;'>{label}</p>", unsafe_allow_html=True)
                 
                 st.markdown(f"""
                 <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 15px;">
-                    <h2 style="margin: 0; font-size: 24px;">{icon} {val:.2f} <span style='font-size: 18px;'>{unit}</span></h2>
+                    <h2 style="margin: 0; font-size: 24px;">{icon} {val:.2f} <span style='font-size: 16px;'>{unit}</span></h2>
                     <p style="margin: 0; font-size: 16px; color: #FFFFFF; align-self: flex-end;">{fecha_str}</p>
                 </div>
                 """, unsafe_allow_html=True)
