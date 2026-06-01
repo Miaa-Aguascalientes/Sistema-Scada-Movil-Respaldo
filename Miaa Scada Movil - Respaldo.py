@@ -919,6 +919,10 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
                 val = ultimos.loc[val_tag, 'VALUE'] if val_tag in ultimos.index else 0
                 fecha_obj = ultimos.loc[val_tag, 'FECHA'] if val_tag in ultimos.index else None
                 
+                # Conversión específica para las variables de setpoint indicadas
+                if val_tag in ["RB_099_TRM_SET_POINT_DIA", "RB_099_TRM_SET_POINT_NOCHE"]:
+                    val = val / 100.0
+                
                 if fecha_obj:
                     meses = {
                         1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio",
