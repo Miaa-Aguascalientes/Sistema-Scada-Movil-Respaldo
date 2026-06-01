@@ -929,7 +929,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
                 else:
                     fecha_str = "N/A"
                 
-                st.markdown("<hr style='border: 0; border-top: 1px solid #FFFFFF; margin: 5px 0;'>", unsafe_allow_html=True)
+                st.markdown("<hr style='border: 0; border-top: 1px solid #FFFFFF; margin: 2px 0 10px 0;'>", unsafe_allow_html=True)
                 st.markdown(f"<p style='font-size: 18px; margin-bottom: 2px; color: #FFFFFF; text-align: center;'>{label}</p>", unsafe_allow_html=True)
                 
                 st.markdown(f"""
