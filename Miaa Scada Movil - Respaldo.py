@@ -930,8 +930,9 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
                 st.markdown(f"<p style='font-size: 14px; margin-bottom: 2px; color: #FFFFFF; text-align: center;'>{label}</p>", unsafe_allow_html=True)
                 st.markdown(f"""
                 <div style="display: flex; justify-content: center; align-items: baseline; gap: 15px; margin-bottom: 15px;">
-                    <h2 style="margin: 0; font-size: 24px;">{icon} {value} <span style='font-size: 14px;'>{unit}</span></h2>
-                    <p style="margin: 0; font-size: 12px; color: #888888;">{fecha_completa}</p>
+                    
+                    <h2 style="margin: 0; font-size: 40px;">{icon} {value} <span style='font-size: 14px;'>{unit}</span></h2>
+                    <p style="margin: 0; font-size: 12px; color: ##FFFFFF;">{fecha_completa}</p>
                 </div>
                 """, unsafe_allow_html=True)
 
