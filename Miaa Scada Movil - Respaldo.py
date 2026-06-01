@@ -927,7 +927,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
             # CSS para ajustar el tamaño de fuente de las métricas (puedes ajustar los px)
             st.markdown("""
                 <style>
-                [data-testid="stMetricValue"] { font-size: 40px !important; }
+                [data-testid="stMetricValue"] { font-size: 30px !important; }
                 [data-testid="stMetricLabel"] { font-size: 14px !important; }
                 </style>
             """, unsafe_allow_html=True)
@@ -972,7 +972,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
                 plot_bgcolor='rgba(0,0,0,0)',
                 hovermode="x unified", 
                 height=280,
-                margin=dict(t=40, b=40, l=20, r=20),
+                margin=dict(t=40, b=40, l=10, r=10),
                 yaxis=dict(title="Nivel (m)", tickformat=".2f"),
                 yaxis2=dict(
                     title="Presión (Kg/cm²)", 
