@@ -923,6 +923,14 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
                 <p style="margin: 0; font-size: 12px; color: #FFFFFF; padding-top: 0px;">Última actualización: {fecha_actual}</p>
             </div>
         """, unsafe_allow_html=True)
+
+            # CSS para ajustar el tamaño de fuente de las métricas (puedes ajustar los px)
+            st.markdown("""
+                <style>
+                [data-testid="stMetricValue"] { font-size: 20px !important; }
+                [data-testid="stMetricLabel"] { font-size: 14px !important; }
+                </style>
+            """, unsafe_allow_html=True)
             
             # --- Métricas ---
             rc1, rc2 = st.columns(2)
