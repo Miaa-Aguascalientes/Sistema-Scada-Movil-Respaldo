@@ -917,19 +917,22 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
             # Función Métricas
             def metric_con_icono_al_lado(label, val_tag, icon, unit):
                 val = ultimos.loc[val_tag, 'VALUE'] if val_tag in ultimos.index else 0
-                fecha = ultimos.loc[val_tag, 'FECHA'].strftime('%d/%m %H:%M') if val_tag in ultimos.index else "N/A"
+                # Extraemos la fecha del dataframe y le damos el formato solicitado
+                fecha_obj = ultimos.loc[val_tag, 'FECHA'] if val_tag in ultimos.index else None
+                fecha_str = fecha_obj.strftime('%d/%m/%Y %H:%M') if fecha_obj else "N/A"
+                
                 st.markdown("<hr style='border: 0; border-top: 1px solid #FFFFFF; margin: 10px 0;'>", unsafe_allow_html=True)
                 st.markdown(f"<p style='font-size: 14px; margin-bottom: 2px; color: #FFFFFF; text-align: center;'>{label}</p>", unsafe_allow_html=True)
+                
+                # Mantenemos el diseño original: Valor a la izquierda, Fecha a la derecha
                 st.markdown(f"""
-                <div style="display: flex; justify-content: center; align-items: baseline; gap: 20px; margin-bottom: 15px;">
-                    <h2 style="margin: 0; font-size: 40px;">{icon}</h2>
-                    <div style="text-align: left;">
-                        <span style="font-size: 24px; font-weight: bold;">{val:.2f} {unit}</span><br>
-                        <span style="font-size: 10px; color: #888888;">{fecha}</span>
-                    </div>
+                <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 15px;">
+                    <h2 style="margin: 0; font-size: 24px;">{icon} {val:.2f} <span style='font-size: 14px;'>{unit}</span></h2>
+                    <p style="margin: 0; font-size: 10px; color: #FFFFFF; align-self: flex-end;">{fecha_str}</p>
                 </div>
                 """, unsafe_allow_html=True)
 
+            # --- Renderizado de Métricas ---
             metric_con_icono_al_lado("Presión actual del Sistema", tag_p, "🕛", "Kg/cm²")
             metric_con_icono_al_lado("Nivel actual de Tanque", tag_n, "🛢️", "mts")
             metric_con_icono_al_lado("Ajuste Setpoint Día", tag_sd, "☀️", "Kg/cm²")
