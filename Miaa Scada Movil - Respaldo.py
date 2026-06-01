@@ -932,7 +932,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
                 <div style="display: flex; justify-content: center; align-items: baseline; gap: 15px; margin-bottom: 15px;">
                     
                     <h2 style="margin: 0; font-size: 40px;">{icon} {value} <span style='font-size: 14px;'>{unit}</span></h2>
-                    <p style="margin: 0; font-size: 12px; color: #FFFFFF;">{fecha_completa}</p>
+                    <span style="font-size: 10px; color: #888888;">{fecha_completa}</span>
                 </div>
                 """, unsafe_allow_html=True)
 
