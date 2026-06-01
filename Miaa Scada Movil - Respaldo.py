@@ -902,7 +902,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
         if not df_hist.empty:
             df_hist['FECHA'] = pd.to_datetime(df_hist['FECHA'])
             
-            # --- Extracción de últimos valores para indicadores ---
+            # --- Extracción de últimos valores ---
             ultimos_valores = df_hist.groupby('TAG')['VALUE'].last()
             p_rb = ultimos_valores.get(tag_p, 0.0)
             n_rb = ultimos_valores.get(tag_n, 0.0)
@@ -912,96 +912,51 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
             # --- Renderizado de Estado ---
             estado_texto = "Sistema Encendido" if float(p_rb) >= 0.100 else "Sistema Apagado"
             color_estado = "#00ff00" if float(p_rb) >= 0.100 else "#ff4b4b"
-
-            zona_mexico = ZoneInfo("America/Mexico_City")
-            fecha_actual = datetime.now(zona_mexico).strftime('%d/%m/%Y %H:%M')
+            fecha_actual = datetime.now(ZoneInfo("America/Mexico_City")).strftime('%d/%m/%Y %H:%M')
         
             st.markdown(f"""
             <div style="border: 2px solid {color_estado}; padding: 10px; border-radius: 10px; text-align: center; margin-bottom: 20px; line-height: 1.2;">
-                <p style="margin: 0; font-size: 12px; color: #FFFFFF; padding-bottom: 0px;">ESTADO DEL SISTEMA</p>
+                <p style="margin: 0; font-size: 12px; color: #FFFFFF;">ESTADO DEL SISTEMA</p>
                 <h3 style="margin: 0; color: {color_estado};">{estado_texto}</h3>
-                <p style="margin: 0; font-size: 12px; color: #FFFFFF; padding-top: 0px;">Última actualización: {fecha_actual}</p>
+                <p style="margin: 0; font-size: 12px; color: #FFFFFF;">Última actualización: {fecha_actual}</p>
             </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
 
+            # --- Función de Métricas ---
+            def metric_con_icono_al_lado(label, value, icon, unit, fecha_completa):
+                st.markdown(f"<p style='font-size: 14px; margin-bottom: 2px; color: #FFFFFF;'>{label}</p>", unsafe_allow_html=True)
+                c_val, c_fecha = st.columns([0.6, 0.4])
+                with c_val:
+                    st.markdown(f"<h2 style='margin-top: 0px; font-size: 24px;'>{icon} {value} <span style='font-size: 14px;'>{unit}</span></h2>", unsafe_allow_html=True)
+                with c_fecha:
+                    st.markdown(f"<p style='font-size: 10px; margin-top: 10px; color: #888888; text-align: right;'>{fecha_completa}</p>", unsafe_allow_html=True)
 
+            # --- Renderizado de Métricas ---
+            fecha_completa = datetime.now(ZoneInfo("America/Mexico_City")).strftime('%d/%m/%Y %H:%M')
             
-            # --- Métricas ---
-        def metric_con_icono_al_lado(label, value, icon, unit, fecha_completa):
-            # Fila 1: Título solamente
-            st.markdown(f"<p style='font-size: 14px; margin-bottom: 2px; color: #FFFFFF;'>{label}</p>", unsafe_allow_html=True)
-            
-            # Fila 2: Icono + Valor a la izquierda, Fecha a la derecha
-            c_val, c_fecha = st.columns([0.6, 0.4])
-            with c_val:
-                st.markdown(f"<h2 style='margin-top: 0px; font-size: 24px;'>{icon} {value} <span style='font-size: 14px;'>{unit}</span></h2>", unsafe_allow_html=True)
-            with c_fecha:
-                st.markdown(f"<p style='font-size: 10px; margin-top: 10px; color: #888888; text-align: right;'>{fecha_completa}</p>", unsafe_allow_html=True)
+            rc1, rc2 = st.columns(2)
+            with rc1:
+                metric_con_icono_al_lado("Presión actual del sistema", f"{float(p_rb):.2f}", "🕛", "Kg/cm²", fecha_completa)
+            with rc2:
+                metric_con_icono_al_lado("Último Nivel Tanque", f"{float(n_rb):.2f}", "🛢️", "mts", fecha_completa)
 
-        # Calculamos la fecha completa (Día/Mes/Año Hora:Minuto)
-        zona_mexico = ZoneInfo("America/Mexico_City")
-        fecha_completa = datetime.now(zona_mexico).strftime('%d/%m/%Y %H:%M')
-
-        # Renderizado usando tu indexación exacta
-        rc1, rc2 = st.columns(2)
-        with rc1:
-            metric_con_icono_al_lado("Presión actual del sistema", f"{float(p_rb):.2f}", "🕛", "Kg/cm²", fecha_completa)
-        with rc2:
-            metric_con_icono_al_lado("Último Nivel Tanque", f"{float(n_rb):.2f}", "🛢️", "mts", fecha_completa)
-
-        rc3, rc4 = st.columns(2)
-        with rc3:
-            metric_con_icono_al_lado("Ajuste de Setpoint Día", f"{float(sp_dia):.2f}", "☀️", "Kg/cm²", fecha_completa)
-        with rc4:
-            metric_con_icono_al_lado("Ajuste de Setpoint Noche", f"{float(sp_noche):.2f}", "🌙", "Kg/cm²", fecha_completa)
+            rc3, rc4 = st.columns(2)
+            with rc3:
+                metric_con_icono_al_lado("Ajuste de Setpoint Día", f"{float(sp_dia):.2f}", "☀️", "Kg/cm²", fecha_completa)
+            with rc4:
+                metric_con_icono_al_lado("Ajuste de Setpoint Noche", f"{float(sp_noche):.2f}", "🌙", "Kg/cm²", fecha_completa)
             
             # --- Gráfico ---
             st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Histórico: Presión y Nivel de Tanque</h4>", unsafe_allow_html=True)
             fig_rb = go.Figure()
             
-            # Nivel de Tanque (Eje Principal)
             df_n = df_hist[df_hist['TAG'] == tag_n]
-            fig_rb.add_trace(go.Scatter(
-                x=df_n['FECHA'], y=df_n['VALUE'].round(2), 
-                name='Nivel (Mts)', 
-                mode='lines+markers', # <--- AQUÍ ESTÁ LA CORRECCIÓN
-                line=dict(color='#00d4ff', width=2),
-                marker=dict(size=4)
-            ))
+            fig_rb.add_trace(go.Scatter(x=df_n['FECHA'], y=df_n['VALUE'].round(2), name='Nivel (Mts)', mode='lines+markers', line=dict(color='#00d4ff', width=2), marker=dict(size=4)))
             
-            # Presión (Eje Secundario)
             df_p = df_hist[df_hist['TAG'] == tag_p]
-            fig_rb.add_trace(go.Scatter(
-                x=df_p['FECHA'], y=df_p['VALUE'].round(2), 
-                name='Presión (Kg/cm²)', 
-                mode='lines+markers', # <--- AQUÍ ESTÁ LA CORRECCIÓN
-                line=dict(color='#00ff00', width=2), 
-                marker=dict(size=4),
-                yaxis="y2"
-            ))
+            fig_rb.add_trace(go.Scatter(x=df_p['FECHA'], y=df_p['VALUE'].round(2), name='Presión (Kg/cm²)', mode='lines+markers', line=dict(color='#00ff00', width=2), marker=dict(size=4), yaxis="y2"))
             
-            fig_rb.update_layout(
-                template="plotly_dark", 
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)',
-                hovermode="x unified", 
-                height=280,
-                margin=dict(t=40, b=40, l=0, r=0),
-                yaxis=dict(title="Nivel (m)", tickformat=".2f"),
-                yaxis2=dict(
-                    title="Presión (Kg/cm²)", 
-                    overlaying="y", 
-                    side="right",
-                    tickformat=".2f"
-                ),
-                legend=dict(
-                    orientation="h",
-                    yanchor="bottom",
-                    y=1.2,
-                    xanchor="left",
-                    x=0
-                )
-            )
+            fig_rb.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', hovermode="x unified", height=280, margin=dict(t=40, b=40, l=0, r=0), yaxis=dict(title="Nivel (m)", tickformat=".2f"), yaxis2=dict(title="Presión (Kg/cm²)", overlaying="y", side="right", tickformat=".2f"), legend=dict(orientation="h", yanchor="bottom", y=1.2, xanchor="left", x=0))
             st.plotly_chart(fig_rb, use_container_width=True)
         else:
             st.warning("No hay datos históricos para el rango seleccionado.")
