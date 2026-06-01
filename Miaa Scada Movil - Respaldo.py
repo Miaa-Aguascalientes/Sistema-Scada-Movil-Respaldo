@@ -874,7 +874,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
             <div style="border: 2px solid {color_estado}; padding: 10px; border-radius: 10px; text-align: center; margin-bottom: 20px;">
                 <p style="margin: 0; font-size: 12px; color: #888;">ESTADO DEL SISTEMA</p>
                 <h3 style="margin: 0; color: {color_estado};">{estado_texto}</h3>
-                <p style="margin: 0; font-size: 10px; color: #888;">Última actualización: {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
+                <p style="margin: 0; font-size: 10px; color: #888;">Última actualización: {fecha_actual}</p>
             </div>
         """, unsafe_allow_html=True)
         
