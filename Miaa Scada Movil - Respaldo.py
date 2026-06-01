@@ -810,7 +810,7 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
                 x=df_hist['FECHA'],
                 y=df_hist['VALUE'],
                 name="Nivel Tq",
-                mode='lines+markers', # Cambio realizado: líneas y puntos
+                mode='lines+markers', 
                 line=dict(color='#00ffcc', width=2),
                 fill='tozeroy',
                 fillcolor='rgba(0, 255, 204, 0.1)',
@@ -923,7 +923,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
                 paper_bgcolor='rgba(0,0,0,0)',
                 plot_bgcolor='rgba(0,0,0,0)',
                 hovermode="x unified",
-                height=300,  # <--- AJUSTA ESTE VALOR (ej. 250 a 350 es ideal para móvil)
+                height=280,  # Ajuste de altura para móvil
                 yaxis=dict(title="Nivel (m)", tickformat=".2f"),
                 yaxis2=dict(
                     title="Presión (Kg/cm²)",
@@ -931,8 +931,15 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
                     side="right",
                     tickformat=".2f"
                 ),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                margin=dict(l=40, r=40, t=30, b=0)
+                # Leyenda a la izquierda
+                legend=dict(
+                    orientation="h", 
+                    yanchor="bottom", 
+                    y=1.02, 
+                    xanchor="left", # Anclaje al lado izquierdo
+                    x=0             # Posición 0 (izquierda)
+                ),
+                margin=dict(l=40, r=40, t=40, b=0)
             )
             
             fig_rb.update_traces(hovertemplate="%{y:.2f}")
