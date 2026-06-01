@@ -917,14 +917,14 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
             # Función Métricas
             def metric_con_icono_al_lado(label, val_tag, icon, unit):
                 val = ultimos.loc[val_tag, 'VALUE'] if val_tag in ultimos.index else 0
-                # Extraemos la fecha del dataframe y le damos el formato solicitado
                 fecha_obj = ultimos.loc[val_tag, 'FECHA'] if val_tag in ultimos.index else None
-                fecha_str = fecha_obj.strftime('%d/%m/%Y %H:%M') if fecha_obj else "N/A"
+                
+                # %d: día, %B: mes completo (ej: Junio), %Y: año, %H:%M: hora
+                fecha_str = fecha_obj.strftime('%d/%B/%Y %H:%M') if fecha_obj else "N/A"
                 
                 st.markdown("<hr style='border: 0; border-top: 1px solid #FFFFFF; margin: 10px 0;'>", unsafe_allow_html=True)
                 st.markdown(f"<p style='font-size: 14px; margin-bottom: 2px; color: #FFFFFF; text-align: center;'>{label}</p>", unsafe_allow_html=True)
                 
-                # Mantenemos el diseño original: Valor a la izquierda, Fecha a la derecha
                 st.markdown(f"""
                 <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 15px;">
                     <h2 style="margin: 0; font-size: 24px;">{icon} {val:.2f} <span style='font-size: 14px;'>{unit}</span></h2>
