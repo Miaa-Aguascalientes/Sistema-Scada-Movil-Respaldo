@@ -863,7 +863,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
         
         # 2. Selector de Rango de Fechas
         st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Configuración de Histórico</h4>", unsafe_allow_html=True)
-        opciones = ["Últimos 7 días", "Hoy", "Ayer", "Últimos 14 días", "Este Mes", "Personalizado"]
+        opciones = ["Hoy", "Ayer", "Últimos 7 días", "Últimos 14 días", "Este Mes", "Último Mes", "Últimos 6 meses", "Personalizado"]
         opcion_fecha = st.selectbox("Rango de tiempo:", opciones, index=0, key="sel_rango_rb")
         
         hoy_dt = datetime.now()
@@ -872,6 +872,11 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
         elif opcion_fecha == "Últimos 7 días": f_ini = hoy_dt - timedelta(days=7)
         elif opcion_fecha == "Últimos 14 días": f_ini = hoy_dt - timedelta(days=14)
         elif opcion_fecha == "Este Mes": f_ini = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        elif opcion_fecha == "Último Mes":primer_dia_actual = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        f_ini = (primer_dia_actual - timedelta(days=1)).replace(day=1)
+        f_fin = primer_dia_actual - timedelta(seconds=1)
+    elif opcion_fecha == "Últimos 6 meses":
+        f_ini = hoy_dt - timedelta(days=180)    
         else:
             rango = st.date_input("Selecciona rango:", [hoy_dt - timedelta(days=7), hoy_dt], key="date_rb")
             f_ini = rango[0] if len(rango) == 2 else hoy_dt - timedelta(days=7)
