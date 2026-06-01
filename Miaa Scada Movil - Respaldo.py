@@ -939,7 +939,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
                     xanchor="left", # Anclaje al lado izquierdo
                     x=0             # Posición 0 (izquierda)
                 ),
-                margin=dict(l=40, r=40, t=40, b=0)
+                margin=dict(t=60, b=80, l=10, r=10),
             )
             
             fig_rb.update_traces(hovertemplate="%{y:.2f}")
