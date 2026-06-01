@@ -849,6 +849,13 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
 
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
 
+Entiendo perfectamente. Para que no tengas que reconstruir nada ni perder ninguna parte de tu lógica anterior, he integrado toda la sección de rebombeos en un solo bloque.
+
+Este bloque incluye la lógica de fechas, la consulta SQL, el renderizado del estado, la función de métricas (con los iconos grandes, las líneas divisorias y las fechas reales de la base de datos), y el gráfico.
+
+Copia y reemplaza todo el bloque de código desde elif st.session_state.activo_tipo == "Rebombeo" ... hasta el final del else del gráfico:
+
+Python
 elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id != "-- Seleccionar --":
     id_rb = st.session_state.activo_id
     info_rb = mapa_rebombeos_dict.get(id_rb)
@@ -856,7 +863,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
     if info_rb:
         st.markdown(f"<h3 style='color:#00d4ff;'>🧊 Rebombeo: {info_rb['nombre']}</h3>", unsafe_allow_html=True)
         
-        # 1. Selector de Rango de Fechas (necesario primero para definir la consulta)
+        # 1. Selector de Rango de Fechas
         opciones = ["Hoy", "Ayer", "Últimos 7 días", "Últimos 14 días", "Este Mes", "Último Mes", "Últimos 6 meses", "Personalizado"]
         opcion_fecha = st.selectbox("Rango de tiempo:", opciones, index=2, key="sel_rango_rb")
         
@@ -879,12 +886,10 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
             f_ini = pd.to_datetime(rango[0]) if len(rango) == 2 else hoy_dt - timedelta(days=7)
             if len(rango) == 2: f_fin = pd.to_datetime(rango[1]).replace(hour=23, minute=59, second=59)
 
-        # 2. ÚNICA CONSULTA a la base de datos
+        # 2. Consulta a BD
         engine = get_mysql_scada_engine()
-        tag_p = info_rb.get('presion')
-        tag_n = info_rb.get('nivel_tanque')
-        tag_sd = info_rb.get('setpoint_dia')
-        tag_sn = info_rb.get('setpoint_noche')
+        tag_p, tag_n = info_rb.get('presion'), info_rb.get('nivel_tanque')
+        tag_sd, tag_sn = info_rb.get('setpoint_dia'), info_rb.get('setpoint_noche')
         
         tags_todos = [t for t in [tag_p, tag_n, tag_sd, tag_sn] if t]
         tags_str = ",".join([f"'{t}'" for t in tags_todos])
@@ -901,61 +906,52 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
         
         if not df_hist.empty:
             df_hist['FECHA'] = pd.to_datetime(df_hist['FECHA'])
-            
-            # --- Extracción de últimos valores ---
-            ultimos_valores = df_hist.groupby('TAG')['VALUE'].last()
-            p_rb = ultimos_valores.get(tag_p, 0.0)
-            n_rb = ultimos_valores.get(tag_n, 0.0)
-            sp_dia = ultimos_valores.get(tag_sd, 0.0)
-            sp_noche = ultimos_valores.get(tag_sn, 0.0)
+            df_hist = df_hist.sort_values('FECHA')
+            ultimos = df_hist.groupby('TAG').last()
 
-            # --- Renderizado de Estado ---
-            estado_texto = "Sistema Encendido" if float(p_rb) >= 0.100 else "Sistema Apagado"
-            color_estado = "#00ff00" if float(p_rb) >= 0.100 else "#ff4b4b"
-            fecha_actual = datetime.now(ZoneInfo("America/Mexico_City")).strftime('%d/%m/%Y %H:%M')
-        
+            # Renderizado de Estado
+            p_val = ultimos.loc[tag_p, 'VALUE'] if tag_p in ultimos.index else 0
+            estado_texto = "Sistema Encendido" if float(p_val) >= 0.100 else "Sistema Apagado"
+            color_estado = "#00ff00" if float(p_val) >= 0.100 else "#ff4b4b"
+            
             st.markdown(f"""
-            <div style="border: 2px solid {color_estado}; padding: 10px; border-radius: 10px; text-align: center; margin-bottom: 20px; line-height: 1.2;">
+            <div style="border: 2px solid {color_estado}; padding: 10px; border-radius: 10px; text-align: center; margin-bottom: 20px;">
                 <p style="margin: 0; font-size: 12px; color: #FFFFFF;">ESTADO DEL SISTEMA</p>
                 <h3 style="margin: 0; color: {color_estado};">{estado_texto}</h3>
-                <p style="margin: 0; font-size: 12px; color: #FFFFFF;">Última actualización: {fecha_actual}</p>
             </div>
             """, unsafe_allow_html=True)
 
-            # --- Función de Métricas ---
-            def metric_con_icono_al_lado(label, value, icon, unit, fecha_completa):
-                # Línea divisoria antes de cada métrica
+            # Función Métricas
+            def metric_con_icono_al_lado(label, val_tag, icon, unit):
+                val = ultimos.loc[val_tag, 'VALUE'] if val_tag in ultimos.index else 0
+                fecha = ultimos.loc[val_tag, 'FECHA'].strftime('%d/%m %H:%M') if val_tag in ultimos.index else "N/A"
                 st.markdown("<hr style='border: 0; border-top: 1px solid #FFFFFF; margin: 10px 0;'>", unsafe_allow_html=True)
-                
                 st.markdown(f"<p style='font-size: 14px; margin-bottom: 2px; color: #FFFFFF; text-align: center;'>{label}</p>", unsafe_allow_html=True)
                 st.markdown(f"""
-                <div style="display: flex; justify-content: center; align-items: baseline; gap: 15px; margin-bottom: 15px;">
-                    <h2 style="margin: 0; font-size: 24px;">{icon} {value} <span style='font-size: 14px;'>{unit}</span></h2>
-                    <p style="margin: 0; font-size: 10px; color: #FFFFFF;">{fecha_completa}</p>
+                <div style="display: flex; justify-content: center; align-items: baseline; gap: 20px; margin-bottom: 15px;">
+                    <h2 style="margin: 0; font-size: 40px;">{icon}</h2>
+                    <div style="text-align: left;">
+                        <span style="font-size: 24px; font-weight: bold;">{val:.2f} {unit}</span><br>
+                        <span style="font-size: 10px; color: #888888;">{fecha}</span>
+                    </div>
                 </div>
                 """, unsafe_allow_html=True)
 
-            # --- Renderizado ---
-            fecha_actual = datetime.now(ZoneInfo("America/Mexico_City")).strftime('%d/%m/%Y %H:%M')
-            
-            metric_con_icono_al_lado("Presión actual del Sistema", f"{float(p_rb):.2f}", "🕛", "Kg/cm²", fecha_actual)
-            metric_con_icono_al_lado("Nivel actual de Tanque", f"{float(n_rb):.2f}", "🛢️", "mts", fecha_actual)
-            metric_con_icono_al_lado("Ajuste Setpoint Día", f"{float(sp_dia):.2f}", "☀️", "Kg/cm²", fecha_actual)
-            metric_con_icono_al_lado("Ajuste Setpoint Noche", f"{float(sp_noche):.2f}", "🌙", "Kg/cm²", fecha_actual)
+            metric_con_icono_al_lado("Presión actual del Sistema", tag_p, "🕛", "Kg/cm²")
+            metric_con_icono_al_lado("Nivel actual de Tanque", tag_n, "🛢️", "mts")
+            metric_con_icono_al_lado("Ajuste Setpoint Día", tag_sd, "☀️", "Kg/cm²")
+            metric_con_icono_al_lado("Ajuste Setpoint Noche", tag_sn, "🌙", "Kg/cm²")
 
-            st.markdown("<hr style='border: 0; border-top: 1px solid #FFFFFF; margin: 20px 0;'>", unsafe_allow_html=True)
-            
-            # --- Gráfico ---
+            # Gráfico
+            st.markdown("<hr style='border: 0; border-top: 2px solid #00d4ff; margin: 20px 0;'>", unsafe_allow_html=True)
             st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Histórico: Presión y Nivel de Tanque</h4>", unsafe_allow_html=True)
+            
             fig_rb = go.Figure()
-            
-            df_n = df_hist[df_hist['TAG'] == tag_n]
+            df_n, df_p = df_hist[df_hist['TAG'] == tag_n], df_hist[df_hist['TAG'] == tag_p]
             fig_rb.add_trace(go.Scatter(x=df_n['FECHA'], y=df_n['VALUE'].round(2), name='Nivel (Mts)', mode='lines+markers', line=dict(color='#00d4ff', width=2), marker=dict(size=4)))
-            
-            df_p = df_hist[df_hist['TAG'] == tag_p]
             fig_rb.add_trace(go.Scatter(x=df_p['FECHA'], y=df_p['VALUE'].round(2), name='Presión (Kg/cm²)', mode='lines+markers', line=dict(color='#00ff00', width=2), marker=dict(size=4), yaxis="y2"))
             
-            fig_rb.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', hovermode="x unified", height=280, margin=dict(t=40, b=40, l=0, r=0), yaxis=dict(title="Nivel (m)", tickformat=".2f"), yaxis2=dict(title="Presión (Kg/cm²)", overlaying="y", side="right", tickformat=".2f"), legend=dict(orientation="h", yanchor="bottom", y=1.2, xanchor="left", x=0))
+            fig_rb.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', hovermode="x unified", height=280, margin=dict(t=40, b=40, l=0, r=0), yaxis=dict(title="Nivel (m)"), yaxis2=dict(title="Presión (Kg/cm²)", overlaying="y", side="right"), legend=dict(orientation="h", y=1.2))
             st.plotly_chart(fig_rb, use_container_width=True)
         else:
             st.warning("No hay datos históricos para el rango seleccionado.")
