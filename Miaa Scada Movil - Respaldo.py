@@ -304,7 +304,8 @@ def cargar_sectores_poligonos():
         """
         
         # Leemos los datos directamente
-        df = pd.read_sql(query, conn)
+        with engine.connect() as conn:
+            df = pd.read_sql(q, conn)
         
         # Si df está vacío, regresamos lista vacía, si no, el dict
         return df.to_dict('records') if not df.empty else []
