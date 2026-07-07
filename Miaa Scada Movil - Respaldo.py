@@ -283,10 +283,12 @@ def obtener_historia_7_dias(tag_name):
 # 2. Función de sectores corregida
 @st.cache_data(ttl=3600)
 def cargar_sectores_poligonos():
-    # Obtenemos una conexión fresca
-    conn = psycopg2.connect(**st.secrets["postgres"])
-    if not conn: return []
+    conn = None
     try:
+        # Usamos un bloque with para asegurar que la conexión se maneje correctamente
+        conn = psycopg2.connect(**st.secrets["postgres"])
+        
+        # Consulta optimizada: manejamos nulos en geom y aseguramos el formato
         query = """
             SELECT sector, "Pozos_Sector", 
                    "Superficie", "Long_Red", "Vol_Prod", "U_Domesticos", 
@@ -294,18 +296,24 @@ def cargar_sectores_poligonos():
                    "Faltas_Agua", "Fugas_Tot", "FTC", "FTA", 
                    "Vol_Medid", "Vol_Fact", "Kwh", "costoKw-hr", 
                    "Recaudacion", "Dotacion", "Balance_Estimado",
-                   ST_AsGeoJSON(ST_Transform(geom, 4326)) as geo 
+                   CASE 
+                       WHEN geom IS NOT NULL THEN ST_AsGeoJSON(ST_Transform(geom, 4326)) 
+                       ELSE NULL 
+                   END as geo 
             FROM "Sectorizacion"."Sectores_hidr"
         """
-        # Leemos los datos
+        
+        # Leemos los datos directamente
         df = pd.read_sql(query, conn)
-        return df.to_dict('records')
+        
+        # Si df está vacío, regresamos lista vacía, si no, el dict
+        return df.to_dict('records') if not df.empty else []
+        
     except Exception as e:
-        st.error(f"Error al cargar sectores: {e}")
+        # Mostramos el error real para identificar si es de Postgres o de red
+        st.error(f"Error crítico en la consulta de sectores: {e}")
         return []
     finally:
-        # El bloque finally asegura que la conexión se cierre SIEMPRE
-        # al terminar la función, exitosa o fallida.
         if conn:
             conn.close()
 
