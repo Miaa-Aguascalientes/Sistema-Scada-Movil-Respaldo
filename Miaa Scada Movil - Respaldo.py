@@ -819,7 +819,6 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
         st.error(f"Error cargando tanque: {e}")
 
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
-
 elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != "-- Seleccionar --":
     sec_id = st.session_state.activo_id
     datos_s = next((s for s in sectores if s['sector'] == sec_id), None)
@@ -842,13 +841,24 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
         # Gráficos Históricos del Sector
         st.markdown("<h4 style='color:#00d4ff;'>📈 Histórico Puntos de control y Pozos</h4>", unsafe_allow_html=True)
         
+        # Selector de Rango de Fechas / Días a mostrar
+        col_f1, col_f2 = st.columns(2)
+        with col_f1:
+            f_ini_h = st.date_input("Fecha Inicio", pd.to_datetime("today") - pd.Timedelta(days=7), key="f_ini_sec")
+        with col_f2:
+            f_fin_h = st.date_input("Fecha Fin", pd.to_datetime("today"), key="f_fin_sec")
+        
         # 1. Cargar Puntos de control asignados al sector
         dict_reg_all = cargar_puntos_de_control_desde_db()
         dict_reg = {k: v for k, v in dict_reg_all.items() if str(v.get('sector')).strip() == str(sec_id).strip()}
         
-        # 2. Cargar Pozos asociados al sector (asumiendo función similar o filtrando de la fuente de pozos)
+        # 2. Cargar Pozos asociados al sector o globales (asegurando el cruce correcto por sector o ID)
         pozos_all = cargar_pozos_desde_db() if 'cargar_pozos_desde_db' in globals() else []
         pozos_sector = [p for p in pozos_all if str(p.get('sector')).strip() == str(sec_id).strip()]
+        
+        # Respaldo por si la relación de sector en pozos viene vacía pero el usuario lo busca explícitamente (ej. P156)
+        if not pozos_sector and 'mapa_pozos_dict' in globals():
+            pozos_sector = [p_info for id_p, p_info in mapa_pozos_dict.items() if str(p_info.get('sector')).strip() == str(sec_id).strip()]
         
         tags_sector = []
         mapeo_config = {}
@@ -867,9 +877,9 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                     tags_sector.append(tag_v)
                     mapeo_config[tag_v] = {'label': lb, 'color': clr, 'sec': sec}
                     
-        # Recolectar tags de pozos (Caudal, Presión y Nivel/Tanque)
+        # Recolectar tags de pozos (Caudal, Presión y Nivel/Tanque) con soporte a múltiples nomenclaturas de llaves
         for p_info in pozos_sector:
-            p_nombre = p_info.get('nombre', 'Pozo')
+            p_nombre = p_info.get('nombre') or p_info.get('pozo') or f"Pozo {p_info.get('id', '')}"
             conf_pz = [
                 ('tag_q', f"{p_nombre} - Q", '#00d4ff', False),
                 ('tag_p', f"{p_nombre} - P", '#00ff00', True),
@@ -885,7 +895,7 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
             try:
                 engine_h = get_mysql_scada_engine()
                 tags_unicos = "', '".join(list(set(tags_sector)))
-                q_sec = f"SELECT h.FECHA, h.VALUE, r.NAME as TAG FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME IN ('{tags_unicos}') AND h.FECHA >= DATE_SUB(NOW(), INTERVAL 7 DAY) ORDER BY h.FECHA ASC"
+                q_sec = f"SELECT h.FECHA, h.VALUE, r.NAME as TAG FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME IN ('{tags_unicos}') AND h.FECHA BETWEEN '{f_ini_h} 00:00:00' AND '{f_fin_h} 23:59:59' ORDER BY h.FECHA ASC"
                 df_sec = pd.read_sql(q_sec, engine_h)
                 
                 if not df_sec.empty:
@@ -993,7 +1003,7 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                     )
                     st.plotly_chart(fig_sec, use_container_width=True)
                 else:
-                    st.info("Sin registros telemétricos en los últimos 7 días para este sector.")
+                    st.info("Sin registros telemétricos en el rango de fechas seleccionado para este sector.")
             except Exception as e:
                 st.error(f"Error Scada: {e}")
         else:
