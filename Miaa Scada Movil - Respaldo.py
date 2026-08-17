@@ -818,7 +818,6 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                     idx_q = 0
                     idx_p = 0
                     
-                    # Lista para construir la leyenda personalizada en columnas
                     leyendaitems = []
 
                     for tag_name in tags_sector:
@@ -873,7 +872,7 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                         hovermode="x unified",
                         height=400,
                         margin=dict(t=30, b=30, l=10, r=10),
-                        showlegend=False, # Ocultamos la leyenda nativa de Plotly para evitar el desorden
+                        showlegend=False,
                         xaxis=dict(
                             color="white", 
                             showgrid=False,
@@ -897,22 +896,20 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                         )
                     )
                     
-                    # RENDERIZAR LEYENDA PERSONALIZADA EN 3 COLUMNAS EXACTAS
+                    # LEYENDA FORZADA EN 3 COLUMNAS CON FLEXBOX (Incluso en modo vertical)
                     st.markdown("<p style='color:#00d4ff; font-weight:bold; margin-bottom:5px; font-size:13px;'>Variables en este gráfico:</p>", unsafe_allow_html=True)
                     
-                    # Dividimos los items en bloques de 3 columnas
-                    for i in range(0, len(leyendaitems), 3):
-                        cols = st.columns(3)
-                        for j in range(3):
-                            if i + j < len(leyendaitems):
-                                item = leyendaitems[i + j]
-                                with cols[j]:
-                                    st.markdown(f"""
-                                        <div style="display: flex; align-items: center; margin-bottom: 6px;">
-                                            <span style="height: 10px; width: 18px; background-color: {item['color']}; display: inline-block; margin-right: 6px; border-radius: 2px;"></span>
-                                            <span style="color: white; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{item['label']}</span>
-                                        </div>
-                                    """, unsafe_allow_html=True)
+                    html_leyenda = '<div style="display: flex; flex-wrap: wrap; width: 100%; margin-bottom: 10px;">'
+                    for item in leyendaitems:
+                        html_leyenda += f'''
+                            <div style="flex: 0 0 33.333%; max-width: 33.333%; display: flex; align-items: center; margin-bottom: 6px; box-sizing: border-box; padding-right: 5px;">
+                                <span style="height: 10px; width: 16px; background-color: {item['color']}; display: inline-block; margin-right: 5px; border-radius: 2px; flex-shrink: 0;"></span>
+                                <span style="color: white; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{item['label']}</span>
+                            </div>
+                        '''
+                    html_leyenda += '</div>'
+                    
+                    st.markdown(html_leyenda, unsafe_allow_html=True)
 
                     # Contenedor con scroll horizontal para el gráfico
                     st.markdown("""
