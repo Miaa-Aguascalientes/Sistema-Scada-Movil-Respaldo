@@ -862,9 +862,11 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
             f_ini_h = hoy.replace(day=1)
             f_fin_h = hoy
         elif rango_seleccionado == "Último Mes":
+            import calendar
             mes_anterior = hoy.replace(day=1) - pd.Timedelta(days=1)
+            ultimo_dia = calendar.monthrange(mes_anterior.year, mes_anterior.month)[1]
             f_ini_h = mes_anterior.replace(day=1)
-            f_fin_h = mes_anterior.replace(day=days_in_month if 'days_in_month' in globals() else 28)
+            f_fin_h = mes_anterior.replace(day=ultimo_dia)
         elif rango_seleccionado == "Últimos 6 meses":
             f_ini_h = hoy - pd.Timedelta(days=180)
             f_fin_h = hoy
