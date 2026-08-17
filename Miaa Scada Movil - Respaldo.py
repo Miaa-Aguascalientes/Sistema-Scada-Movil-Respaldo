@@ -820,121 +820,6 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
 
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
 
-elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id != "-- Seleccionar --":
-    id_rb = st.session_state.activo_id
-    info_rb = mapa_rebombeos_dict.get(id_rb)
-    
-    if info_rb:
-        st.markdown(f"<h3 style='color:#00d4ff;'>🧊 Rebombeo: {info_rb['nombre']}</h3>", unsafe_allow_html=True)
-        
-        # 1. Selector de Rango de Fechas
-        opciones = ["Hoy", "Ayer", "Últimos 7 días", "Últimos 14 días", "Este Mes", "Último Mes", "Últimos 6 meses", "Personalizado"]
-        opcion_fecha = st.selectbox("Rango de tiempo:", opciones, index=2, key="sel_rango_rb")
-        
-        hoy_dt = datetime.now()
-        f_fin = hoy_dt
-        if opcion_fecha == "Hoy": f_ini = hoy_dt.replace(hour=0, minute=0, second=0, microsecond=0)
-        elif opcion_fecha == "Ayer": 
-            f_ini = (hoy_dt - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-            f_fin = hoy_dt.replace(hour=0, minute=0, second=0, microsecond=0)
-        elif opcion_fecha == "Últimos 7 días": f_ini = hoy_dt - timedelta(days=7)
-        elif opcion_fecha == "Últimos 14 días": f_ini = hoy_dt - timedelta(days=14)
-        elif opcion_fecha == "Este Mes": f_ini = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        elif opcion_fecha == "Último Mes":
-            primer_dia_actual = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            f_ini = (primer_dia_actual - timedelta(days=1)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            f_fin = primer_dia_actual - timedelta(seconds=1)
-        elif opcion_fecha == "Últimos 6 meses": f_ini = hoy_dt - timedelta(days=180)
-        else:
-            rango = st.date_input("Selecciona rango:", [hoy_dt - timedelta(days=7), hoy_dt], key="date_rb")
-            f_ini = pd.to_datetime(rango[0]) if len(rango) == 2 else hoy_dt - timedelta(days=7)
-            if len(rango) == 2: f_fin = pd.to_datetime(rango[1]).replace(hour=23, minute=59, second=59)
-
-        # 2. Consulta a BD
-        engine = get_mysql_scada_engine()
-        tag_p, tag_n = info_rb.get('presion'), info_rb.get('nivel_tanque')
-        tag_sd, tag_sn = info_rb.get('setpoint_dia'), info_rb.get('setpoint_noche')
-        
-        tags_todos = [t for t in [tag_p, tag_n, tag_sd, tag_sn] if t]
-        tags_str = ",".join([f"'{t}'" for t in tags_todos])
-        
-        query = f"""
-            SELECT h.FECHA, h.VALUE, r.NAME as TAG
-            FROM vfitagnumhistory h
-            JOIN VfiTagRef r ON h.GATEID = r.GATEID
-            WHERE r.NAME IN ({tags_str})
-            AND h.FECHA BETWEEN '{f_ini.strftime('%Y-%m-%d %H:%M:%S')}' AND '{f_fin.strftime('%Y-%m-%d %H:%M:%S')}'
-            ORDER BY h.FECHA ASC
-        """
-        df_hist = pd.read_sql(query, engine)
-        
-        if not df_hist.empty:
-            df_hist['FECHA'] = pd.to_datetime(df_hist['FECHA'])
-            df_hist = df_hist.sort_values('FECHA')
-            ultimos = df_hist.groupby('TAG').last()
-
-            # Renderizado de Estado
-            p_val = ultimos.loc[tag_p, 'VALUE'] if tag_p in ultimos.index else 0
-            estado_texto = "Sistema Encendido" if float(p_val) >= 0.100 else "Sistema Apagado"
-            color_estado = "#00ff00" if float(p_val) >= 0.100 else "#ff4b4b"
-            
-            st.markdown(f"""
-            <div style="border: 2px solid {color_estado}; padding: 10px; border-radius: 10px; text-align: center; margin-bottom: 20px;">
-                <p style="margin: 0; font-size: 12px; color: #FFFFFF;">ESTADO DEL SISTEMA</p>
-                <h3 style="margin: 0; color: {color_estado};">{estado_texto}</h3>
-            </div>
-            """, unsafe_allow_html=True)
-
-            # Función Métricas
-            def metric_con_icono_al_lado(label, val_tag, icon, unit):
-                val = ultimos.loc[val_tag, 'VALUE'] if val_tag in ultimos.index else 0
-                fecha_obj = ultimos.loc[val_tag, 'FECHA'] if val_tag in ultimos.index else None
-                
-                # Conversión específica para las variables de setpoint indicadas
-                if val_tag in ["RB_099_TRM_SET_POINT_DIA", "RB_099_TRM_SET_POINT_NOCHE"]:
-                    val = val / 100.0
-                
-                if fecha_obj:
-                    meses = {
-                        1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio",
-                        7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
-                    }
-                    mes_nombre = meses[fecha_obj.month]
-                    fecha_str = f"{fecha_obj.day:02d}/{mes_nombre}/{fecha_obj.year} {fecha_obj.strftime('%H:%M')}"
-                else:
-                    fecha_str = "N/A"
-                
-                st.markdown("<hr style='border: 0; border-top: 1px solid #FFFFFF; margin: 2px 0 5px 0;'>", unsafe_allow_html=True)
-                st.markdown(f"<p style='font-size: 18px; margin-bottom: 2px; color: #FFFFFF; text-align: center;'>{label}</p>", unsafe_allow_html=True)
-                
-                st.markdown(f"""
-                <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 15px;">
-                    <h2 style="margin: 0; font-size: 24px;">{icon} {val:.2f} <span style='font-size: 16px;'>{unit}</span></h2>
-                    <p style="margin: 0; font-size: 16px; color: #FFFFFF; align-self: flex-end;">{fecha_str}</p>
-                </div>
-                """, unsafe_allow_html=True)
-
-            # --- Renderizado de Métricas ---
-            metric_con_icono_al_lado("Presión actual del Sistema", tag_p, "🕛", "Kg/cm²")
-            metric_con_icono_al_lado("Nivel actual de Tanque", tag_n, "🛢️", "mts")
-            metric_con_icono_al_lado("Ajuste Setpoint Día", tag_sd, "☀️", "Kg/cm²")
-            metric_con_icono_al_lado("Ajuste Setpoint Noche", tag_sn, "🌙", "Kg/cm²")
-
-            # Gráfico
-            st.markdown("<hr style='border: 0; border-top: 2px solid #00d4ff; margin: 20px 0;'>", unsafe_allow_html=True)
-            st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Histórico: Presión y Nivel de Tanque</h4>", unsafe_allow_html=True)
-            
-            fig_rb = go.Figure()
-            df_n, df_p = df_hist[df_hist['TAG'] == tag_n], df_hist[df_hist['TAG'] == tag_p]
-            fig_rb.add_trace(go.Scatter(x=df_n['FECHA'], y=df_n['VALUE'].round(2), name='Nivel (Mts)', mode='lines+markers', line=dict(color='#00d4ff', width=2), marker=dict(size=4)))
-            fig_rb.add_trace(go.Scatter(x=df_p['FECHA'], y=df_p['VALUE'].round(2), name='Presión (Kg/cm²)', mode='lines+markers', line=dict(color='#00ff00', width=2), marker=dict(size=4), yaxis="y2"))
-            
-            fig_rb.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', hovermode="x unified", height=280, margin=dict(t=40, b=40, l=0, r=0), yaxis=dict(title="Nivel (m)"), yaxis2=dict(title="Presión (Kg/cm²)", overlaying="y", side="right"), legend=dict(orientation="h", y=1.2))
-            st.plotly_chart(fig_rb, use_container_width=True)
-        else:
-            st.warning("No hay datos históricos para el rango seleccionado.")
-# ------------------------------------------------------------------------------ seccion de sectores ------------------------------------------------------------------------
-
 elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != "-- Seleccionar --":
     sec_id = st.session_state.activo_id
     datos_s = next((s for s in sectores if s['sector'] == sec_id), None)
@@ -966,127 +851,151 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
         pozos_sector = [p for p in pozos_all if str(p.get('sector')).strip() == str(sec_id).strip()]
         
         tags_sector = []
+        mapeo_config = {}
         
         # Recolectar tags de puntos de control
-        for r in dict_reg.values():
-            if r.get('tag_p1'): tags_sector.append(r.get('tag_p1'))
-            if r.get('tag_p2'): tags_sector.append(r.get('tag_p2'))
-            if r.get('tag_q'): tags_sector.append(r.get('tag_q'))
-            
-        # Recolectar tags de pozos (Caudal, Presión/Nivel)
-        for p in pozos_sector:
-            if p.get('tag_q'): tags_sector.append(p.get('tag_q'))
-            if p.get('tag_p'): tags_sector.append(p.get('tag_p'))
-            if p.get('tag_nivel'): tags_sector.append(p.get('tag_nivel'))
+        for r_id, r_info in dict_reg.items():
+            nombre_disp = f"S:{r_id}"
+            conf_pc = [
+                ('tag_q', f"{nombre_disp} - Q", '#00d4ff', False),
+                ('tag_p1', f"{nombre_disp} - P1", '#00ff00', True),
+                ('tag_p2', f"{nombre_disp} - P2", '#ffff00', True)
+            ]
+            for key_t, lb, clr, sec in conf_pc:
+                tag_v = r_info.get(key_t)
+                if tag_v and str(tag_v).strip().lower() not in ['0', 'none', 'n/a', 'null']:
+                    tags_sector.append(tag_v)
+                    mapeo_config[tag_v] = {'label': lb, 'color': clr, 'sec': sec}
+                    
+        # Recolectar tags de pozos (Caudal, Presión y Nivel/Tanque)
+        for p_info in pozos_sector:
+            p_nombre = p_info.get('nombre', 'Pozo')
+            conf_pz = [
+                ('tag_q', f"{p_nombre} - Q", '#00d4ff', False),
+                ('tag_p', f"{p_nombre} - P", '#00ff00', True),
+                ('tag_nivel', f"{p_nombre} - Nivel", '#0000FF', True)
+            ]
+            for key_t, lb, clr, sec in conf_pz:
+                tag_v = p_info.get(key_t)
+                if tag_v and str(tag_v).strip().lower() not in ['0', 'none', 'n/a', 'null']:
+                    tags_sector.append(tag_v)
+                    mapeo_config[tag_v] = {'label': lb, 'color': clr, 'sec': sec}
                 
         if tags_sector:
-            engine_h = get_mysql_scada_engine()
-            tags_unicos = "', '".join(list(set(tags_sector)))
-            q_sec = f"SELECT h.FECHA, h.VALUE, r.NAME as TAG FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME IN ('{tags_unicos}') AND h.FECHA >= DATE_SUB(NOW(), INTERVAL 7 DAY) ORDER BY h.FECHA ASC"
-            df_sec = pd.read_sql(q_sec, engine_h)
-            
-            if not df_sec.empty:
-                df_sec['FECHA'] = pd.to_datetime(df_sec['FECHA'])
-                fig_sec = go.Figure()
+            try:
+                engine_h = get_mysql_scada_engine()
+                tags_unicos = "', '".join(list(set(tags_sector)))
+                q_sec = f"SELECT h.FECHA, h.VALUE, r.NAME as TAG FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME IN ('{tags_unicos}') AND h.FECHA >= DATE_SUB(NOW(), INTERVAL 7 DAY) ORDER BY h.FECHA ASC"
+                df_sec = pd.read_sql(q_sec, engine_h)
                 
-                # Graficar Puntos de Control
-                for r_id, r_info in dict_reg.items():
-                    nombre_disp = f"S:{r_id}"
+                if not df_sec.empty:
+                    df_sec['FECHA'] = pd.to_datetime(df_sec['FECHA'])
                     
-                    tag_p1 = r_info.get('tag_p1')
-                    if tag_p1 and tag_p1 != 'N/A':
-                        df_p1 = df_sec[df_sec['TAG'] == tag_p1]
-                        if not df_p1.empty:
-                            fig_sec.add_trace(go.Scatter(
-                                x=df_p1['FECHA'], y=df_p1['VALUE'], 
-                                name=f"{nombre_disp} - P1", 
-                                mode='lines', yaxis="y2", line=dict(width=1.5)
-                            ))
+                    dias_es = {0: 'Lun', 1: 'Mar', 2: 'Mié', 3: 'Jue', 4: 'Vie', 5: 'Sáb', 6: 'Dom'}
+                    meses_es = {1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr', 5: 'May', 6: 'Jun', 
+                                 7: 'Jul', 8: 'Ago', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dic'}
+
+                    fechas_lineas = pd.date_range(start=df_sec['FECHA'].min().floor('D'), 
+                                                  end=df_sec['FECHA'].max().ceil('D'), freq='D')
                     
-                    tag_p2 = r_info.get('tag_p2')
-                    if tag_p2 and tag_p2 != 'N/A' and tag_p2 is not None:
-                        df_p2 = df_sec[df_sec['TAG'] == tag_p2]
-                        if not df_p2.empty:
+                    num_dias = len(fechas_lineas)
+                    paso = 1 if num_dias <= 15 else (2 if num_dias <= 30 else 5)
+                    ticks_filtrados = fechas_lineas[::paso]
+
+                    etiquetas_filtradas = [
+                        f"{d.strftime('%H:%M')}<br>{dias_es[d.dayofweek]} {d.day}-{meses_es[d.month]}-{d.year}"
+                        for d in ticks_filtrados
+                    ]
+                
+                    fig_sec = go.Figure()
+                    idx_q = 0
+                    idx_p = 0
+
+                    for tag_name in tags_sector:
+                        df_tag = df_sec[df_sec['TAG'] == tag_name]
+                        if not df_tag.empty:
+                            cfg = mapeo_config[tag_name]
+                            es_caudal = not cfg['sec']
+                            label_u = cfg['label'].upper()
+
+                            if es_caudal:
+                                unidad_pc = "Lps"
+                            elif "NIVEL" in label_u or "TANQUE" in label_u or "MTS" in label_u:
+                                unidad_pc = "Mts"
+                            else:
+                                unidad_pc = "kg/cm²"
+                            
+                            if es_caudal:
+                                brillo = max(75 - (idx_q * 15), 35) 
+                                color_base = f"hsl(200, 100%, {brillo}%)" 
+                                idx_q += 1
+                            else:
+                                brillo = max(80 - (idx_p * 20), 30)
+                                color_base = f"hsl(145, 100%, {brillo}%)"
+                                idx_p += 1
+
                             fig_sec.add_trace(go.Scatter(
-                                x=df_p2['FECHA'], y=df_p2['VALUE'], 
-                                name=f"{nombre_disp} - P2", 
-                                mode='lines', yaxis="y2", line=dict(width=1.5)
+                                x=df_tag['FECHA'], 
+                                y=df_tag['VALUE'], 
+                                name=cfg['label'], 
+                                yaxis="y2" if cfg['sec'] else "y1", 
+                                mode='lines+markers',
+                                line=dict(width=1.8, color=color_base),
+                                marker=dict(size=3, symbol='circle'),
+                                fill='tozeroy' if es_caudal else None,
+                                fillcolor=color_base.replace("hsl", "hsla").replace(")", ", 0.15)"),
+                                hovertemplate='<b>%{fullData.name}</b>: %{y:.2f} ' + unidad_pc + '<extra></extra>'
                             ))
 
-                    tag_q = r_info.get('tag_q')
-                    if tag_q and tag_q != 'N/A' and tag_q is not None:
-                        df_q = df_sec[df_sec['TAG'] == tag_q]
-                        if not df_q.empty:
-                            fig_sec.add_trace(go.Scatter(
-                                x=df_q['FECHA'], y=df_q['VALUE'], 
-                                name=f"{nombre_disp} - Q", 
-                                mode='lines', fill='tozeroy',
-                                fillcolor='rgba(0, 140, 255, 0.05)',
-                                line=dict(width=1.8), yaxis="y"
-                            ))
-
-                # Graficar Pozos del Sector (Caudal, Presión y Nivel)
-                for p_info in pozos_sector:
-                    p_nombre = p_info.get('nombre', 'Pozo')
+                    delta = pd.Timedelta(hours=1)
+                    for d in fechas_lineas:
+                        es_lunes = (d.dayofweek == 0)
+                        fig_sec.add_vrect(x0=d - delta, x1=d + delta, fillcolor="gray", opacity=0.2, layer="below", line_width=0)
+                        fig_sec.add_vline(x=d, line_width=1.5, line_dash="dash", 
+                                          line_color="#fffb00" if es_lunes else "white", opacity=0.5, layer="above")
                     
-                    # Caudal de Pozo
-                    tag_pq = p_info.get('tag_q')
-                    if tag_pq and tag_pq != 'N/A':
-                        df_pq = df_sec[df_sec['TAG'] == tag_pq]
-                        if not df_pq.empty:
-                            fig_sec.add_trace(go.Scatter(
-                                x=df_pq['FECHA'], y=df_pq['VALUE'], 
-                                name=f"{p_nombre} - Q", 
-                                mode='lines', line=dict(width=1.8), yaxis="y"
-                            ))
-                            
-                    # Presión de Pozo
-                    tag_pp = p_info.get('tag_p')
-                    if tag_pp and tag_pp != 'N/A':
-                        df_pp = df_sec[df_sec['TAG'] == tag_pp]
-                        if not df_pp.empty:
-                            fig_sec.add_trace(go.Scatter(
-                                x=df_pp['FECHA'], y=df_pp['VALUE'], 
-                                name=f"{p_nombre} - Presión", 
-                                mode='lines', line=dict(width=1.5), yaxis="y2"
-                            ))
-                            
-                    # Nivel de Pozo / Tanque
-                    tag_pniv = p_info.get('tag_nivel')
-                    if tag_pniv and tag_pniv != 'N/A':
-                        df_pniv = df_sec[df_sec['TAG'] == tag_pniv]
-                        if not df_pniv.empty:
-                            fig_sec.add_trace(go.Scatter(
-                                x=df_pniv['FECHA'], y=df_pniv['VALUE'], 
-                                name=f"{p_nombre} - Nivel", 
-                                mode='lines', line=dict(width=1.5), yaxis="y2"
-                            ))
-                        
-                fig_sec.update_layout(
-                    template="plotly_dark", 
-                    paper_bgcolor='rgba(0,0,0,0)', 
-                    plot_bgcolor='rgba(0,0,0,0)', 
-                    hovermode="x unified",
-                    height=350,
-                    margin=dict(t=30, b=20, l=10, r=10),
-                    xaxis=dict(
-                        showgrid=True, gridcolor='rgba(255,255,255,0.1)', color='white', tickfont=dict(size=9)
-                    ),
-                    yaxis=dict(
-                        title="Caudales (m³/h)", showgrid=True, gridcolor='rgba(255,255,255,0.1)', color='white',
-                        title_font=dict(size=10), tickfont=dict(size=9)
-                    ),
-                    yaxis2=dict(
-                        title="Presiones / Niveles", overlaying="y", side="right", showgrid=False, color='white',
-                        title_font=dict(size=10), tickfont=dict(size=9)
-                    ),
-                    legend=dict(
-                        orientation="h", y=1.25, x=0.5, xanchor="center", font=dict(size=8)
+                    fig_sec.update_layout(
+                        template="plotly_dark", 
+                        paper_bgcolor='rgba(0,0,0,0)', 
+                        plot_bgcolor='rgba(0,0,0,0)', 
+                        hovermode="x unified",
+                        height=380,
+                        margin=dict(t=30, b=20, l=10, r=10),
+                        xaxis=dict(
+                            color="white", 
+                            showgrid=False,
+                            tickvals=ticks_filtrados, 
+                            ticktext=etiquetas_filtradas, 
+                            tickangle=0,
+                            tickformat="%d-%b-%Y %H:%M"
+                        ),
+                        yaxis=dict(
+                            title="Caudales (m³/h)", 
+                            color="#00d4ff", 
+                            tickformat=".2f"
+                        ),
+                        yaxis2=dict(
+                            title="Presiones / Niveles", 
+                            overlaying="y", 
+                            side="right", 
+                            color="#00ff00", 
+                            showgrid=False, 
+                            tickformat=".2f"
+                        ),
+                        legend=dict(
+                            orientation="h", 
+                            yanchor="bottom", 
+                            y=1.15, 
+                            x=0.5, 
+                            xanchor="center", 
+                            font=dict(color="white", size=10)
+                        )
                     )
-                )
-                st.plotly_chart(fig_sec, use_container_width=True)
-            else:
-                st.info("Sin registros telemétricos en los últimos 7 días para este sector.")
+                    st.plotly_chart(fig_sec, use_container_width=True)
+                else:
+                    st.info("Sin registros telemétricos en los últimos 7 días para este sector.")
+            except Exception as e:
+                st.error(f"Error Scada: {e}")
         else:
             st.info("No hay puntos de control ni pozos vinculados a este sector.")
     # Vista Default (HUD de Bienvenida) cuando no hay ningún elemento activo seleccionado
