@@ -870,7 +870,7 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                         paper_bgcolor='rgba(0,0,0,0)', 
                         plot_bgcolor='rgba(0,0,0,0)', 
                         hovermode="x unified",
-                        height=400,
+                        height=200,
                         width=1400,          # <--- Añade esto para forzar el ancho real en pixeles
                         autosize=False,      # <--- Añade esto para evitar que Streamlit lo comprima
                         margin=dict(t=30, b=30, l=10, r=10),
