@@ -886,8 +886,7 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                         yaxis=dict(
                             title="Caudales (m³/h)", 
                             color="#00d4ff", 
-                            showticklabels=False,  # <--- Quita los números/valores del eje
-                            ticks=""
+                            tickformat=".2f"
                         ),
                         yaxis2=dict(
                             title="Presiones / Niveles", 
@@ -895,9 +894,7 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                             side="right", 
                             color="#00ff00", 
                             showgrid=False, 
-                            showticklabels=False,  # <--- Quita los números/valores del eje secundario
-                            ticks=""
-                            
+                            tickformat=".2f"
                         )
                     )
                     
