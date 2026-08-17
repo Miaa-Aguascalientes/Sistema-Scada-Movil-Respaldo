@@ -877,30 +877,38 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
             with col_f2:
                 f_fin_h = st.date_input("Fecha Fin", hoy, key="f_fin_sec_custom")
 
-        # Cargar datos
+        # 1. Cargar Puntos de control asignados al sector
         dict_reg_all = cargar_puntos_de_control_desde_db()
         dict_reg = {k: v for k, v in dict_reg_all.items() if str(v.get('sector')).strip() == str(sec_id).strip()}
         
+        # 2. Cargar Pozos asociados
         tags_sector = []
         mapeo_config = {}
         
-        # Puntos de control
         for r_id, r_info in dict_reg.items():
             nombre_disp = f"S:{r_id}"
-            conf_pc = [('tag_q', f"{nombre_disp} - Q", '#00d4ff', False), ('tag_p1', f"{nombre_disp} - P1", '#00ff00', True), ('tag_p2', f"{nombre_disp} - P2", '#ffff00', True)]
+            conf_pc = [
+                ('tag_q', f"{nombre_disp} - Q", '#00d4ff', False),
+                ('tag_p1', f"{nombre_disp} - P1", '#00ff00', True),
+                ('tag_p2', f"{nombre_disp} - P2", '#ffff00', True)
+            ]
             for key_t, lb, clr, sec in conf_pc:
                 tag_v = r_info.get(key_t)
                 if tag_v and str(tag_v).strip().lower() not in ['0', 'none', 'n/a', 'null']:
                     tags_sector.append(tag_v)
                     mapeo_config[tag_v] = {'label': lb, 'color': clr, 'sec': sec}
                     
-        # Pozos
         if 'mapa_pozos_dict' in globals():
             ids_p_sector = [id_p for id_p, p_info in mapa_pozos_dict.items() if str(p_info.get('sector')).strip() == str(sec_id).strip() or str(sec_id).lower() in str(p_info.get('sector', '')).lower() or str(id_p).strip() == "P156"]
+            
             for id_p in ids_p_sector:
                 if id_p in mapa_pozos_dict:
                     p_info = mapa_pozos_dict[id_p]
-                    conf_pz = [('caudal', f"Pozo {id_p} - Q", '#00d4ff', False), ('presion', f"Pozo {id_p} - P", '#00ff00', True), ('nivel_tanque', f"Pozo {id_p} - Nivel", '#0000FF', True)]
+                    conf_pz = [
+                        ('caudal', f"Pozo {id_p} - Q", '#00d4ff', False),
+                        ('presion', f"Pozo {id_p} - P", '#00ff00', True),
+                        ('nivel_tanque', f"Pozo {id_p} - Nivel", '#0000FF', True)
+                    ]
                     for key_t, lb, clr, sec in conf_pz:
                         tag_v = p_info.get(key_t)
                         if tag_v and str(tag_v).strip().lower() not in ['0', 'none', 'n/a', 'null']:
@@ -916,40 +924,131 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                 
                 if not df_sec.empty:
                     df_sec['FECHA'] = pd.to_datetime(df_sec['FECHA'])
-                    fechas_lineas = pd.date_range(start=df_sec['FECHA'].min().floor('D'), end=df_sec['FECHA'].max().ceil('D'), freq='D')
+                    
+                    dias_es = {0: 'Lun', 1: 'Mar', 2: 'Mié', 3: 'Jue', 4: 'Vie', 5: 'Sáb', 6: 'Dom'}
+                    meses_es = {1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr', 5: 'May', 6: 'Jun', 
+                                 7: 'Jul', 8: 'Ago', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dic'}
+
+                    fechas_lineas = pd.date_range(start=df_sec['FECHA'].min().floor('D'), 
+                                                  end=df_sec['FECHA'].max().ceil('D'), freq='D')
+                    
                     num_dias = len(fechas_lineas)
                     paso = 1 if num_dias <= 15 else (2 if num_dias <= 30 else 5)
                     ticks_filtrados = fechas_lineas[::paso]
-                    
+
+                    etiquetas_filtradas = [
+                        f"{d.strftime('%H:%M')}<br>{dias_es[d.dayofweek]} {d.day}-{meses_es[d.month]}-{d.year}"
+                        for d in ticks_filtrados
+                    ]
+                
                     fig_sec = go.Figure()
+                    idx_q = 0
+                    idx_p = 0
+
                     for tag_name in tags_sector:
                         df_tag = df_sec[df_sec['TAG'] == tag_name]
                         if not df_tag.empty:
                             cfg = mapeo_config[tag_name]
                             es_caudal = not cfg['sec']
-                            color_base = "hsl(200, 100%, 60%)" if es_caudal else "hsl(145, 100%, 50%)"
+                            label_u = cfg['label'].upper()
+
+                            if es_caudal:
+                                unidad_pc = "Lps"
+                            elif "NIVEL" in label_u or "TANQUE" in label_u or "MTS" in label_u:
+                                unidad_pc = "Mts"
+                            else:
+                                unidad_pc = "kg/cm²"
                             
+                            if es_caudal:
+                                brillo = max(75 - (idx_q * 15), 35) 
+                                color_base = f"hsl(200, 100%, {brillo}%)" 
+                                idx_q += 1
+                            else:
+                                brillo = max(80 - (idx_p * 20), 30)
+                                color_base = f"hsl(145, 100%, {brillo}%)"
+                                idx_p += 1
+
                             fig_sec.add_trace(go.Scatter(
-                                x=df_tag['FECHA'], y=df_tag['VALUE'], name=cfg['label'],
-                                yaxis="y2" if cfg['sec'] else "y1", mode='lines',
-                                line=dict(width=2, color=color_base),
-                                hovertemplate='<b>%{fullData.name}</b>: %{y:.2f}<extra></extra>'
+                                x=df_tag['FECHA'], 
+                                y=df_tag['VALUE'], 
+                                name=cfg['label'], 
+                                yaxis="y2" if cfg['sec'] else "y1", 
+                                mode='lines+markers',
+                                line=dict(width=1.8, color=color_base),
+                                marker=dict(size=3, symbol='circle'),
+                                fill='tozeroy' if es_caudal else None,
+                                fillcolor=color_base.replace("hsl", "hsla").replace(")", ", 0.15)"),
+                                hovertemplate='<b>%{fullData.name}</b>: %{y:.2f} ' + unidad_pc + '<extra></extra>'
                             ))
+
+                    delta = pd.Timedelta(hours=1)
+                    for d in fechas_lineas:
+                        es_lunes = (d.dayofweek == 0)
+                        fig_sec.add_vrect(x0=d - delta, x1=d + delta, fillcolor="gray", opacity=0.2, layer="below", line_width=0)
+                        fig_sec.add_vline(x=d, line_width=1.5, line_dash="dash", 
+                                            line_color="#fffb00" if es_lunes else "white", opacity=0.5, layer="above")
                     
-                    # Optimizacion Mobile
                     fig_sec.update_layout(
-                        template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                        hovermode="closest", height=500, margin=dict(t=50, b=50, l=40, r=40),
-                        xaxis=dict(color="white", showgrid=False, tickangle=45, tickformat="%d-%b"),
-                        yaxis=dict(title="Caudal", color="#00d4ff", side="left"),
-                        yaxis2=dict(title="P/N", overlaying="y", side="right", color="#00ff00"),
-                        legend=dict(orientation="h", yanchor="bottom", y=-0.4, x=0.5, xanchor="center", font=dict(size=9))
+                        template="plotly_dark", 
+                        paper_bgcolor='rgba(0,0,0,0)', 
+                        plot_bgcolor='rgba(0,0,0,0)', 
+                        hovermode="x unified",
+                        height=380,
+                        margin=dict(t=30, b=20, l=10, r=10),
+                        xaxis=dict(
+                            color="white", 
+                            showgrid=False,
+                            tickvals=ticks_filtrados, 
+                            ticktext=etiquetas_filtradas, 
+                            tickangle=0,
+                            tickformat="%d-%b-%Y %H:%M"
+                        ),
+                        yaxis=dict(
+                            title="Caudales (m³/h)", 
+                            color="#00d4ff", 
+                            tickformat=".2f"
+                        ),
+                        yaxis2=dict(
+                            title="Presiones / Niveles", 
+                            overlaying="y", 
+                            side="right", 
+                            color="#00ff00", 
+                            showgrid=False, 
+                            tickformat=".2f"
+                        ),
+                        legend=dict(
+                            orientation="h", 
+                            yanchor="bottom", 
+                            y=1.15, 
+                            x=0.5, 
+                            xanchor="center", 
+                            font=dict(color="white", size=10)
+                        )
                     )
+                    
+                    # Contenedor con scroll horizontal para celulares (evita que se amontone sin perder diseño)
+                    st.markdown("""
+                        <style>
+                        .scrollable-chart {
+                            overflow-x: auto;
+                            width: 100%;
+                        }
+                        .scrollable-chart > div {
+                            min-width: 700px;
+                        }
+                        </style>
+                    """, unsafe_allow_html=True)
+                    
+                    st.markdown('<div class="scrollable-chart">', unsafe_allow_html=True)
                     st.plotly_chart(fig_sec, use_container_width=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
+
                 else:
-                    st.info("Sin registros telemétricos.")
+                    st.info("Sin registros telemétricos en el rango de fechas seleccionado para este sector.")
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"Error Scada: {e}")
+        else:
+            st.info("No hay puntos de control ni pozos vinculados a este sector.")
     # Vista Default (HUD de Bienvenida) cuando no hay ningún elemento activo seleccionado
     st.markdown("""
     <div style="text-align: center; margin-top: 40px; padding: 20px; background: rgba(0,212,255,0.02); border: 1px dashed #1f4068; border-radius: 10px;">
