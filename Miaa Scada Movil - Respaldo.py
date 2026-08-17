@@ -792,7 +792,6 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                 engine_h = get_mysql_scada_engine()
                 tags_unicos = "', '".join(list(set(tags_sector)))
                 
-                # Consulta SQL corregida con tu estructura original exacta
                 q_sec = f"SELECT h.FECHA, h.VALUE, r.NAME as TAG FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME IN ('{tags_unicos}') AND h.FECHA BETWEEN '{f_ini_h} 00:00:00' AND '{f_fin_h} 23:59:59' ORDER BY h.FECHA ASC"
                 df_sec = pd.read_sql(q_sec, engine_h)
                 
@@ -818,6 +817,9 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                     fig_sec = go.Figure()
                     idx_q = 0
                     idx_p = 0
+                    
+                    # Lista para construir la leyenda personalizada en columnas
+                    leyendaitems = []
 
                     for tag_name in tags_sector:
                         df_tag = df_sec[df_sec['TAG'] == tag_name]
@@ -854,6 +856,8 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                                 fillcolor=color_base.replace("hsl", "hsla").replace(")", ", 0.15)"),
                                 hovertemplate='<b>%{fullData.name}</b>: %{y:.2f} ' + unidad_pc + '<extra></extra>'
                             ))
+                            
+                            leyendaitems.append({"label": cfg['label'], "color": color_base})
 
                     delta = pd.Timedelta(hours=1)
                     for d in fechas_lineas:
@@ -867,8 +871,9 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                         paper_bgcolor='rgba(0,0,0,0)', 
                         plot_bgcolor='rgba(0,0,0,0)', 
                         hovermode="x unified",
-                        height=420,
-                        margin=dict(t=80, b=30, l=10, r=10),
+                        height=400,
+                        margin=dict(t=30, b=30, l=10, r=10),
+                        showlegend=False, # Ocultamos la leyenda nativa de Plotly para evitar el desorden
                         xaxis=dict(
                             color="white", 
                             showgrid=False,
@@ -889,17 +894,27 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                             color="#00ff00", 
                             showgrid=False, 
                             tickformat=".2f"
-                        ),
-                        legend=dict(
-                            orientation="h", 
-                            yanchor="bottom", 
-                            y=1.12, 
-                            x=0.5, 
-                            xanchor="center", 
-                            font=dict(color="white", size=10)
                         )
                     )
                     
+                    # RENDERIZAR LEYENDA PERSONALIZADA EN 3 COLUMNAS EXACTAS
+                    st.markdown("<p style='color:#00d4ff; font-weight:bold; margin-bottom:5px; font-size:13px;'>Variables en este gráfico:</p>", unsafe_allow_html=True)
+                    
+                    # Dividimos los items en bloques de 3 columnas
+                    for i in range(0, len(leyendaitems), 3):
+                        cols = st.columns(3)
+                        for j in range(3):
+                            if i + j < len(leyendaitems):
+                                item = leyendaitems[i + j]
+                                with cols[j]:
+                                    st.markdown(f"""
+                                        <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                                            <span style="height: 10px; width: 18px; background-color: {item['color']}; display: inline-block; margin-right: 6px; border-radius: 2px;"></span>
+                                            <span style="color: white; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{item['label']}</span>
+                                        </div>
+                                    """, unsafe_allow_html=True)
+
+                    # Contenedor con scroll horizontal para el gráfico
                     st.markdown("""
                         <style>
                         .scrollable-chart {
