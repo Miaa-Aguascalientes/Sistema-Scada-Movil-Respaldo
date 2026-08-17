@@ -911,7 +911,7 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                             padding-bottom: 15px;
                         }
                         .scrollable-chart > div {
-                            min-width: 900px;
+                            min-width: 1200px;
                         }
                         </style>
                     """, unsafe_allow_html=True)
