@@ -841,7 +841,7 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
         # Gráficos Históricos del Sector
         st.markdown("<h4 style='color:#00d4ff;'>📈 Histórico Puntos de control y Pozos</h4>", unsafe_allow_html=True)
         
-        # Selector desplegable de rango de tiempo
+        # Selector desplegable de rango de tiempo idéntico al de otras vistas
         opciones_tiempo = ["Hoy", "Ayer", "Últimos 7 días", "Últimos 14 días", "Este Mes", "Último Mes", "Últimos 6 meses", "Personalizado"]
         rango_seleccionado = st.selectbox("Seleccione el periodo a mostrar", opciones_tiempo, index=2, key="rango_tiempo_sec")
         
@@ -879,7 +879,7 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
         dict_reg_all = cargar_puntos_de_control_desde_db()
         dict_reg = {k: v for k, v in dict_reg_all.items() if str(v.get('sector')).strip() == str(sec_id).strip()}
         
-        # 2. Cargar Pozos asociados usando la estructura de mapa_pozos_dict y ids_p del sector
+        # 2. Cargar Pozos asociados usando exactamente la estructura de mapa_pozos_dict y ids_p del sector
         tags_sector = []
         mapeo_config = {}
         
@@ -897,7 +897,7 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                     tags_sector.append(tag_v)
                     mapeo_config[tag_v] = {'label': lb, 'color': clr, 'sec': sec}
                     
-        # Recolectar pozos vinculados al sector utilizando mapa_pozos_dict
+        # Recolectar pozos vinculados al sector utilizando mapa_pozos_dict y filtrando por sector o ID asignado (ej. P156)
         if 'mapa_pozos_dict' in globals():
             ids_p_sector = [id_p for id_p, p_info in mapa_pozos_dict.items() if str(p_info.get('sector')).strip() == str(sec_id).strip() or str(sec_id).lower() in str(p_info.get('sector', '')).lower() or str(id_p).strip() == "P156"]
             
@@ -936,9 +936,8 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                     paso = 1 if num_dias <= 15 else (2 if num_dias <= 30 else 5)
                     ticks_filtrados = fechas_lineas[::paso]
 
-                    # Leyenda optimizada para móvil: formato compacto sin saltos de línea gigantes
                     etiquetas_filtradas = [
-                        f"{d.strftime('%H:%M')} {d.day}/{meses_es[d.month]}"
+                        f"{d.strftime('%H:%M')}<br>{dias_es[d.dayofweek]} {d.day}-{meses_es[d.month]}-{d.year}"
                         for d in ticks_filtrados
                     ]
                 
@@ -989,45 +988,41 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                         fig_sec.add_vline(x=d, line_width=1.5, line_dash="dash", 
                                           line_color="#fffb00" if es_lunes else "white", opacity=0.5, layer="above")
                     
-                    # Layout optimizado para móvil: evita amontonamiento de títulos y fechas
                     fig_sec.update_layout(
                         template="plotly_dark", 
                         paper_bgcolor='rgba(0,0,0,0)', 
                         plot_bgcolor='rgba(0,0,0,0)', 
                         hovermode="x unified",
-                        height=420,
-                        margin=dict(t=15, b=30, l=10, r=10),
+                        height=380,
+                        margin=dict(t=30, b=20, l=10, r=10),
                         xaxis=dict(
                             color="white", 
                             showgrid=False,
                             tickvals=ticks_filtrados, 
                             ticktext=etiquetas_filtradas, 
-                            tickangle=-45,
-                            tickfont=dict(size=8)
+                            tickangle=0,
+                            tickformat="%d-%b-%Y %H:%M"
                         ),
                         yaxis=dict(
-                            title="Caudales", 
+                            title="Caudales (m³/h)", 
                             color="#00d4ff", 
-                            tickformat=".2f",
-                            titlefont=dict(size=10)
+                            tickformat=".2f"
                         ),
                         yaxis2=dict(
-                            title="Pres / Nivel", 
+                            title="Presiones / Niveles", 
                             overlaying="y", 
                             side="right", 
                             color="#00ff00", 
                             showgrid=False, 
-                            tickformat=".2f",
-                            titlefont=dict(size=10)
+                            tickformat=".2f"
                         ),
                         legend=dict(
                             orientation="h", 
-                            yanchor="top", 
-                            y=-0.35, 
+                            yanchor="bottom", 
+                            y=1.15, 
                             x=0.5, 
                             xanchor="center", 
-                            font=dict(color="white", size=8),
-                            itemwidth=70
+                            font=dict(color="white", size=10)
                         )
                     )
                     st.plotly_chart(fig_sec, use_container_width=True)
