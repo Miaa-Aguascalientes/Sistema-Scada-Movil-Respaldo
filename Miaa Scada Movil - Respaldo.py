@@ -935,160 +935,164 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
             st.warning("No hay datos históricos para el rango seleccionado.")
 # ------------------------------------------------------------------------------ seccion de sectores ------------------------------------------------------------------------
 
-elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != "-- Seleccionar --":
-    sec_id = st.session_state.activo_id
-    datos_s = next((s for s in sectores if s['sector'] == sec_id), None)
-    
-    if datos_s:
-        st.markdown(f"<h3 style='color:#00d4ff;'>🏘️ Sector Hidráulico: {sec_id}</h3>", unsafe_allow_html=True)
-        
-        # Grid compacto de Tarjetas de Información Técnica del Sector (KPIs)
-        sc1, sc2, sc3 = st.columns(3)
-        with sc1:
-            st.markdown(f'<div class="card-indicador"><p class="label-indicador">Superficie</p><p class="value-indicador">{datos_s.get("Superficie",0):,.1f} ha</p></div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="card-indicador"><p class="label-indicador">Tomas Totales</p><p class="value-indicador">{datos_s.get("U_Tot",0):,.0f}</p></div>', unsafe_allow_html=True)
-        with sc2:
-            st.markdown(f'<div class="card-indicador"><p class="label-indicador">Longitud de Red</p><p class="value-indicador">{datos_s.get("Long_Red",0):,.1f} m</p></div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="card-indicador"><p class="label-indicador">Población</p><p class="value-indicador">{datos_s.get("Poblacion",0):,.0f} hab</p></div>', unsafe_allow_html=True)
-        with sc3:
-            st.markdown(f'<div class="card-indicador"><p class="label-indicador">Consumo Mensual</p><p class="value-indicador">{datos_s.get("Cons_m3",0):,.1f} m³</p></div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="card-indicador"><p class="label-indicador">Eficiencia / Balance</p><p class="value-indicador">{datos_s.get("Balance_Estimado",0):,.1f}%</p></div>', unsafe_allow_html=True)
-            
-        # Gráficos Históricos del Sector
-        st.markdown("<h4 style='color:#00d4ff;'>📈 Histórico Puntos de control y Pozos</h4>", unsafe_allow_html=True)
-        
-        # 1. Cargar Puntos de control asignados al sector
-        dict_reg_all = cargar_puntos_de_control_desde_db()
-        dict_reg = {k: v for k, v in dict_reg_all.items() if str(v.get('sector')).strip() == str(sec_id).strip()}
-        
-        # 2. Cargar Pozos asociados al sector (asumiendo función similar o filtrando de la fuente de pozos)
-        pozos_all = cargar_pozos_desde_db() if 'cargar_pozos_desde_db' in globals() else []
-        pozos_sector = [p for p in pozos_all if str(p.get('sector')).strip() == str(sec_id).strip()]
-        
-        tags_sector = []
-        
-        # Recolectar tags de puntos de control
-        for r in dict_reg.values():
-            if r.get('tag_p1'): tags_sector.append(r.get('tag_p1'))
-            if r.get('tag_p2'): tags_sector.append(r.get('tag_p2'))
-            if r.get('tag_q'): tags_sector.append(r.get('tag_q'))
-            
-        # Recolectar tags de pozos (Caudal, Presión/Nivel)
-        for p in pozos_sector:
-            if p.get('tag_q'): tags_sector.append(p.get('tag_q'))
-            if p.get('tag_p'): tags_sector.append(p.get('tag_p'))
-            if p.get('tag_nivel'): tags_sector.append(p.get('tag_nivel'))
-                
-        if tags_sector:
-            engine_h = get_mysql_scada_engine()
-            tags_unicos = "', '".join(list(set(tags_sector)))
-            q_sec = f"SELECT h.FECHA, h.VALUE, r.NAME as TAG FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME IN ('{tags_unicos}') AND h.FECHA >= DATE_SUB(NOW(), INTERVAL 7 DAY) ORDER BY h.FECHA ASC"
-            df_sec = pd.read_sql(q_sec, engine_h)
-            
-            if not df_sec.empty:
-                df_sec['FECHA'] = pd.to_datetime(df_sec['FECHA'])
-                fig_sec = go.Figure()
-                
-                # Graficar Puntos de Control
-                for r_id, r_info in dict_reg.items():
-                    nombre_disp = f"S:{r_id}"
-                    
-                    tag_p1 = r_info.get('tag_p1')
-                    if tag_p1 and tag_p1 != 'N/A':
-                        df_p1 = df_sec[df_sec['TAG'] == tag_p1]
-                        if not df_p1.empty:
-                            fig_sec.add_trace(go.Scatter(
-                                x=df_p1['FECHA'], y=df_p1['VALUE'], 
-                                name=f"{nombre_disp} - P1", 
-                                mode='lines', yaxis="y2", line=dict(width=1.5)
-                            ))
-                    
-                    tag_p2 = r_info.get('tag_p2')
-                    if tag_p2 and tag_p2 != 'N/A' and tag_p2 is not None:
-                        df_p2 = df_sec[df_sec['TAG'] == tag_p2]
-                        if not df_p2.empty:
-                            fig_sec.add_trace(go.Scatter(
-                                x=df_p2['FECHA'], y=df_p2['VALUE'], 
-                                name=f"{nombre_disp} - P2", 
-                                mode='lines', yaxis="y2", line=dict(width=1.5)
-                            ))
+# 7.10. ------------------------------------------- Histórico Punto de Control y Pozos del Sector (Ancho completo) -------------------------
+st.markdown(f"<h3 style='color:#00d4ff; font-size:18px; text-align: center; margin-bottom:0px;'>Histórico Puntos de control y Pozos</h3>", unsafe_allow_html=True)
 
-                    tag_q = r_info.get('tag_q')
-                    if tag_q and tag_q != 'N/A' and tag_q is not None:
-                        df_q = df_sec[df_sec['TAG'] == tag_q]
-                        if not df_q.empty:
-                            fig_sec.add_trace(go.Scatter(
-                                x=df_q['FECHA'], y=df_q['VALUE'], 
-                                name=f"{nombre_disp} - Q", 
-                                mode='lines', fill='tozeroy',
-                                fillcolor='rgba(0, 140, 255, 0.05)',
-                                line=dict(width=1.8), yaxis="y"
-                            ))
+tags_visualizar = []
+mapeo_config = {}
 
-                # Graficar Pozos del Sector (Caudal, Presión y Nivel)
-                for p_info in pozos_sector:
-                    p_nombre = p_info.get('nombre', 'Pozo')
+# 1. Recolección de Puntos de Control (dict_reg)
+for s_id in list(dict_reg.keys()):
+    r_info = dict_reg[s_id]
+    conf_pc = [
+        ('tag_q', f"S:{s_id} - Q", '#00d4ff', False),
+        ('tag_p1', f"S:{s_id} - P1", '#00ff00', True),
+        ('tag_p2', f"S:{s_id} - P2", '#ffff00', True)
+    ]
+    for key_t, lb, clr, sec in conf_pc:
+        tag_v = r_info.get(key_t)
+        if tag_v and str(tag_v).strip().lower() not in ['0', 'none', 'n/a', 'null']:
+            tags_visualizar.append(tag_v)
+            mapeo_config[tag_v] = {'label': lb, 'color': clr, 'sec': sec}
+
+# 2. Recolección de Pozos (mapa_pozos_dict) asegurando los nombres reales de los pozos
+for id_p in ids_p:
+    if id_p in mapa_pozos_dict:
+        p_info = mapa_pozos_dict[id_p]
+        nombre_pozo = p_info.get('nombre', f"Pozo {id_p}")
+        conf_pz = [
+            ('tag_q', f"{nombre_pozo} - Q", '#00d4ff', False),
+            ('tag_p', f"{nombre_pozo} - P", '#00ff00', True),
+            ('tag_nivel', f"{nombre_pozo} - Nivel", '#0000FF', True)
+        ]
+        for key_t, lb, clr, sec in conf_pz:
+            tag_v = p_info.get(key_t)
+            if tag_v and str(tag_v).strip().lower() not in ['0', 'none', 'n/a', 'null']:
+                tags_visualizar.append(tag_v)
+                mapeo_config[tag_v] = {'label': lb, 'color': clr, 'sec': sec}
+
+# 3. Consulta y Renderizado del gráfico a ancho completo
+if tags_visualizar:
+    try:
+        engine_h = get_mysql_scada_engine()
+        tags_unicos_query = "', '".join(list(set(tags_visualizar)))
+        q_hist = f"SELECT h.FECHA, h.VALUE, r.NAME as TAG FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME IN ('{tags_unicos_query}') AND h.FECHA BETWEEN '{f_ini_h} 00:00:00' AND '{f_fin_h} 23:59:59' ORDER BY h.FECHA ASC"
+        df_h = pd.read_sql(q_hist, engine_h)
+        
+        if not df_h.empty:
+            df_h['FECHA'] = pd.to_datetime(df_h['FECHA'])
+            dias_es = {0: 'Lun', 1: 'Mar', 2: 'Mié', 3: 'Jue', 4: 'Vie', 5: 'Sáb', 6: 'Dom'}
+            meses_es = {1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr', 5: 'May', 6: 'Jun', 
+                         7: 'Jul', 8: 'Ago', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dic'}
+
+            # Rango para las líneas divisorias
+            fechas_lineas = pd.date_range(start=df_h['FECHA'].min().floor('D'), 
+                                          end=df_h['FECHA'].max().ceil('D'), freq='D')
+            
+            # Cálculo del paso para evitar amontonamiento
+            num_dias = len(fechas_lineas)
+            paso = 1 if num_dias <= 15 else (2 if num_dias <= 30 else 5)
+            ticks_filtrados = fechas_lineas[::paso]
+
+            # Creación de etiquetas en español
+            etiquetas_filtradas = [
+                f"{d.strftime('%H:%M')}<br>{dias_es[d.dayofweek]} {d.day}-{meses_es[d.month]}-{d.year}"
+                for d in ticks_filtrados
+            ]
+        
+            fig = go.Figure()
+            
+            idx_q = 0
+            idx_p = 0
+
+            for tag_name in tags_visualizar:
+                df_tag = df_h[df_h['TAG'] == tag_name]
+                if not df_tag.empty:
+                    cfg = mapeo_config[tag_name]
+                    es_caudal = not cfg['sec']
+                    label_u = cfg['label'].upper()
+
+                    if es_caudal:
+                        unidad_pc = "Lps"
+                    elif "NIVEL" in label_u or "TANQUE" in label_u or "MTS" in label_u:
+                        unidad_pc = "Mts"
+                    else:
+                        unidad_pc = "kg/cm²"
                     
-                    # Caudal de Pozo
-                    tag_pq = p_info.get('tag_q')
-                    if tag_pq and tag_pq != 'N/A':
-                        df_pq = df_sec[df_sec['TAG'] == tag_pq]
-                        if not df_pq.empty:
-                            fig_sec.add_trace(go.Scatter(
-                                x=df_pq['FECHA'], y=df_pq['VALUE'], 
-                                name=f"{p_nombre} - Q", 
-                                mode='lines', line=dict(width=1.8), yaxis="y"
-                            ))
-                            
-                    # Presión de Pozo
-                    tag_pp = p_info.get('tag_p')
-                    if tag_pp and tag_pp != 'N/A':
-                        df_pp = df_sec[df_sec['TAG'] == tag_pp]
-                        if not df_pp.empty:
-                            fig_sec.add_trace(go.Scatter(
-                                x=df_pp['FECHA'], y=df_pp['VALUE'], 
-                                name=f"{p_nombre} - Presión", 
-                                mode='lines', line=dict(width=1.5), yaxis="y2"
-                            ))
-                            
-                    # Nivel de Pozo / Tanque
-                    tag_pniv = p_info.get('tag_nivel')
-                    if tag_pniv and tag_pniv != 'N/A':
-                        df_pniv = df_sec[df_sec['TAG'] == tag_pniv]
-                        if not df_pniv.empty:
-                            fig_sec.add_trace(go.Scatter(
-                                x=df_pniv['FECHA'], y=df_pniv['VALUE'], 
-                                name=f"{p_nombre} - Nivel", 
-                                mode='lines', line=dict(width=1.5), yaxis="y2"
-                            ))
-                        
-                fig_sec.update_layout(
-                    template="plotly_dark", 
-                    paper_bgcolor='rgba(0,0,0,0)', 
-                    plot_bgcolor='rgba(0,0,0,0)', 
-                    hovermode="x unified",
-                    height=350,
-                    margin=dict(t=30, b=20, l=10, r=10),
-                    xaxis=dict(
-                        showgrid=True, gridcolor='rgba(255,255,255,0.1)', color='white', tickfont=dict(size=9)
-                    ),
-                    yaxis=dict(
-                        title="Caudales (m³/h)", showgrid=True, gridcolor='rgba(255,255,255,0.1)', color='white',
-                        title_font=dict(size=10), tickfont=dict(size=9)
-                    ),
-                    yaxis2=dict(
-                        title="Presiones / Niveles", overlaying="y", side="right", showgrid=False, color='white',
-                        title_font=dict(size=10), tickfont=dict(size=9)
-                    ),
-                    legend=dict(
-                        orientation="h", y=1.25, x=0.5, xanchor="center", font=dict(size=8)
-                    )
+                    if es_caudal:
+                        brillo = max(75 - (idx_q * 15), 35) 
+                        color_base = f"hsl(200, 100%, {brillo}%)" 
+                        idx_q += 1
+                    else:
+                        brillo = max(80 - (idx_p * 20), 30)
+                        color_base = f"hsl(145, 100%, {brillo}%)"
+                        idx_p += 1
+
+                    fig.add_trace(go.Scatter(
+                        x=df_tag['FECHA'], 
+                        y=df_tag['VALUE'], 
+                        name=cfg['label'], 
+                        yaxis="y2" if cfg['sec'] else "y1", 
+                        mode='lines+markers',
+                        line=dict(width=2, color=color_base),
+                        marker=dict(size=3, symbol='circle'),
+                        fill='tozeroy' if es_caudal else None,
+                        fillcolor=color_base.replace("hsl", "hsla").replace(")", ", 0.15)"),
+                        hovertemplate='<b>%{fullData.name}</b>: %{y:.2f} ' + unidad_pc + '<extra></extra>'
+                    ))
+
+            delta = pd.Timedelta(hours=1)
+            for d in fechas_lineas:
+                es_lunes = (d.dayofweek == 0)
+                fig.add_vrect(x0=d - delta, x1=d + delta, fillcolor="gray", opacity=0.2, layer="below", line_width=0)
+                fig.add_vline(x=d, line_width=1.5, line_dash="dash", 
+                              line_color="#fffb00" if es_lunes else "white", opacity=0.5, layer="above")
+            
+            fig.update_layout(
+                template="plotly_dark",
+                paper_bgcolor='rgba(0,0,0,0)', 
+                plot_bgcolor='rgba(0,0,0,0)', 
+                height=380, 
+                margin=dict(l=50, r=50, t=10, b=10), 
+                hovermode="x unified", 
+                legend=dict(
+                    orientation="h", 
+                    yanchor="bottom", 
+                    y=1.15, 
+                    x=0.5, 
+                    xanchor="center", 
+                    font=dict(color="white", size=10)
+                ),
+                xaxis=dict(
+                    color="white", 
+                    showgrid=False,
+                    tickvals=ticks_filtrados, 
+                    ticktext=etiquetas_filtradas, 
+                    tickangle=0,
+                    tickformat="%d-%b-%Y %H:%M"
+                ),
+                yaxis=dict(
+                    title="Caudales (m³/h)", 
+                    color="#00d4ff", 
+                    tickformat=".2f"
+                ),
+                yaxis2=dict(
+                    title="Presiones / Niveles", 
+                    side="right", 
+                    overlaying="y", 
+                    color="#00ff00", 
+                    showgrid=False, 
+                    tickformat=".2f"
                 )
-                st.plotly_chart(fig_sec, use_container_width=True)
-            else:
-                st.info("Sin registros telemétricos en los últimos 7 días para este sector.")
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("No hay puntos de control ni pozos vinculados a este sector.")
+            st.info("Sin registros telemétricos en el rango de fechas seleccionado.")
+    except Exception as e:
+        st.error(f"Error Scada: {e}")
+else:
+    st.info("No hay puntos de control ni pozos vinculados a este sector para mostrar en el histórico.")
     # Vista Default (HUD de Bienvenida) cuando no hay ningún elemento activo seleccionado
     st.markdown("""
     <div style="text-align: center; margin-top: 40px; padding: 20px; background: rgba(0,212,255,0.02); border: 1px dashed #1f4068; border-radius: 10px;">
