@@ -929,7 +929,7 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
         else:
             st.info("No hay puntos de control ni pozos vinculados a este sector.")
 
-    # ------------------------------------------------------------------------------ ZONA : VRP (DEBAJO DEL GRÁFICO ANTERIOR) ----------------------------------------------
+# ------------------------------------------------------------------------------ ZONA : VRP (DEBAJO DEL GRÁFICO ANTERIOR) ----------------------------------------------
         if 'dict_vrp_sec' in locals() and dict_vrp_sec:
             tags_vrp_global = []
             mapeo_vrp_global = {}
