@@ -955,15 +955,14 @@ for s_id in list(dict_reg.keys()):
             tags_visualizar.append(tag_v)
             mapeo_config[tag_v] = {'label': lb, 'color': clr, 'sec': sec}
 
-# 2. Recolección de Pozos (mapa_pozos_dict) asegurando los nombres reales de los pozos
+# 2. Recolección de Pozos (mapa_pozos_dict) usando el formato exacto de etiqueta
 for id_p in ids_p:
     if id_p in mapa_pozos_dict:
         p_info = mapa_pozos_dict[id_p]
-        nombre_pozo = p_info.get('nombre', f"Pozo {id_p}")
         conf_pz = [
-            ('tag_q', f"{nombre_pozo} - Q", '#00d4ff', False),
-            ('tag_p', f"{nombre_pozo} - P", '#00ff00', True),
-            ('tag_nivel', f"{nombre_pozo} - Nivel", '#0000FF', True)
+            ('tag_q', f"Pozo {id_p} - Q", '#00d4ff', False),
+            ('tag_p', f"Pozo {id_p} - P", '#00ff00', True),
+            ('tag_nivel', f"Pozo {id_p} - Nivel", '#0000FF', True)
         ]
         for key_t, lb, clr, sec in conf_pz:
             tag_v = p_info.get(key_t)
