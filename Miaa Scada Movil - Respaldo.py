@@ -955,7 +955,7 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
             st.markdown(f'<div class="card-indicador"><p class="label-indicador">Eficiencia / Balance</p><p class="value-indicador">{datos_s.get("Balance_Estimado",0):,.1f}%</p></div>', unsafe_allow_html=True)
             
         # Gráficos Históricos del Sector
-        st.markdown("<h4 style='color:#00d4ff;'>📈 Comportamiento de Puntos de Control</h4>", unsafe_allow_html=True)
+        st.markdown("<h4 style='color:#00d4ff;'>📈 Histórico Puntos de control</h4>", unsafe_allow_html=True)
         
         # Cargar Puntos de control asignados al sector
         dict_reg_all = cargar_puntos_de_control_desde_db()
@@ -971,7 +971,7 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
             if tags_sector:
                 engine_h = get_mysql_scada_engine()
                 tags_unicos = "', '".join(list(set(tags_sector)))
-                q_sec = f"SELECT h.FECHA, h.VALUE, r.NAME as TAG FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME IN ('{tags_unicos}') AND h.FECHA >= DATE_SUB(NOW(), INTERVAL 3 DAY) ORDER BY h.FECHA ASC"
+                q_sec = f"SELECT h.FECHA, h.VALUE, r.NAME as TAG FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME IN ('{tags_unicos}') AND h.FECHA >= DATE_SUB(NOW(), INTERVAL 7 DAY) ORDER BY h.FECHA ASC"
                 df_sec = pd.read_sql(q_sec, engine_h)
                 
                 if not df_sec.empty:
@@ -979,44 +979,47 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                     fig_sec = go.Figure()
                     
                     for r_id, r_info in dict_reg.items():
-                        # Presión 1
+                        nombre_disp = f"S:{r_id}"
+                        
+                        # Presión 1 -> Eje secundario (Presiones kg)
                         tag_p1 = r_info.get('tag_p1')
                         if tag_p1 and tag_p1 != 'N/A':
                             df_p1 = df_sec[df_sec['TAG'] == tag_p1]
                             if not df_p1.empty:
                                 fig_sec.add_trace(go.Scatter(
-                                    x=df_p1['FECHA'], 
-                                    y=df_p1['VALUE'], 
-                                    name=f"{r_info['nombre']} - P1", 
-                                    mode='lines+markers',
-                                    marker=dict(size=3)
+                                    x=df_p1['FECHA'], y=df_p1['VALUE'], 
+                                    name=f"{nombre_disp} - P1", 
+                                    mode='lines',
+                                    yaxis="y2",
+                                    line=dict(width=1.5)
                                 ))
                         
-                        # Presión 2
+                        # Presión 2 -> Eje secundario (Presiones kg)
                         tag_p2 = r_info.get('tag_p2')
                         if tag_p2 and tag_p2 != 'N/A' and tag_p2 is not None:
                             df_p2 = df_sec[df_sec['TAG'] == tag_p2]
                             if not df_p2.empty:
                                 fig_sec.add_trace(go.Scatter(
-                                    x=df_p2['FECHA'], 
-                                    y=df_p2['VALUE'], 
-                                    name=f"{r_info['nombre']} - P2", 
-                                    mode='lines+markers',
-                                    marker=dict(size=3)
+                                    x=df_p2['FECHA'], y=df_p2['VALUE'], 
+                                    name=f"{nombre_disp} - P2", 
+                                    mode='lines',
+                                    yaxis="y2",
+                                    line=dict(width=1.5)
                                 ))
 
-                        # Caudal
+                        # Caudal -> Eje principal (Caudales m3/h) con relleno translúcido estilo área
                         tag_q = r_info.get('tag_q')
                         if tag_q and tag_q != 'N/A' and tag_q is not None:
                             df_q = df_sec[df_sec['TAG'] == tag_q]
                             if not df_q.empty:
                                 fig_sec.add_trace(go.Scatter(
-                                    x=df_q['FECHA'], 
-                                    y=df_q['VALUE'], 
-                                    name=f"{r_info['nombre']} - Caudal", 
-                                    mode='lines+markers',
-                                    yaxis="y2",
-                                    marker=dict(size=3)
+                                    x=df_q['FECHA'], y=df_q['VALUE'], 
+                                    name=f"{nombre_disp} - Q", 
+                                    mode='lines',
+                                    fill='tozeroy',
+                                    fillcolor='rgba(0, 140, 255, 0.1)',
+                                    line=dict(width=1.8),
+                                    yaxis="y"
                                 ))
                             
                     fig_sec.update_layout(
@@ -1024,18 +1027,44 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                         paper_bgcolor='rgba(0,0,0,0)', 
                         plot_bgcolor='rgba(0,0,0,0)', 
                         hovermode="x unified",
-                        height=320,
-                        margin=dict(t=40, b=40, l=0, r=0),
-                        yaxis=dict(title="Presión (Kg/cm²)"),
-                        yaxis2=dict(title="Caudal (Lps)", overlaying="y", side="right"),
-                        legend=dict(orientation="h", y=1.2, x=0.5, xanchor="center")
+                        height=350,
+                        margin=dict(t=30, b=20, l=10, r=10),
+                        xaxis=dict(
+                            showgrid=True, 
+                            gridcolor='rgba(255,255,255,0.1)', 
+                            color='white',
+                            tickfont=dict(size=9)
+                        ),
+                        yaxis=dict(
+                            title="Caudales (m³/h)", 
+                            showgrid=True, 
+                            gridcolor='rgba(255,255,255,0.1)', 
+                            color='white',
+                            title_font=dict(size=10),
+                            tickfont=dict(size=9)
+                        ),
+                        yaxis2=dict(
+                            title="Presiones (kg)", 
+                            overlaying="y", 
+                            side="right", 
+                            showgrid=False, 
+                            color='white',
+                            title_font=dict(size=10),
+                            tickfont=dict(size=9)
+                        ),
+                        legend=dict(
+                            orientation="h", 
+                            y=1.25, 
+                            x=0.5, 
+                            xanchor="center",
+                            font=dict(size=8)
+                        )
                     )
                     st.plotly_chart(fig_sec, use_container_width=True)
                 else:
                     st.info("Sin registros telemétricos en los últimos 3 días para este sector.")
         else:
             st.info("No hay puntos de control vinculados a este sector.")
-else:
     # Vista Default (HUD de Bienvenida) cuando no hay ningún elemento activo seleccionado
     st.markdown("""
     <div style="text-align: center; margin-top: 40px; padding: 20px; background: rgba(0,212,255,0.02); border: 1px dashed #1f4068; border-radius: 10px;">
