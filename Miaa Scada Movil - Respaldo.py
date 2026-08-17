@@ -841,11 +841,10 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
         # Gráficos Históricos del Sector
         st.markdown("<h4 style='color:#00d4ff;'>📈 Histórico Puntos de control y Pozos</h4>", unsafe_allow_html=True)
         
-        # Selector desplegable de rango de tiempo (idéntico al que usas en otras vistas)
+        # Selector desplegable de rango de tiempo idéntico al de otras vistas
         opciones_tiempo = ["Hoy", "Ayer", "Últimos 7 días", "Últimos 14 días", "Este Mes", "Último Mes", "Últimos 6 meses", "Personalizado"]
         rango_seleccionado = st.selectbox("Seleccione el periodo a mostrar", opciones_tiempo, index=2, key="rango_tiempo_sec")
         
-        # Cálculo de fechas basado en la selección del selectbox
         hoy = pd.to_datetime("today").normalize()
         if rango_seleccionado == "Hoy":
             f_ini_h = hoy
@@ -865,11 +864,11 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
         elif rango_seleccionado == "Último Mes":
             mes_anterior = hoy.replace(day=1) - pd.Timedelta(days=1)
             f_ini_h = mes_anterior.replace(day=1)
-            f_fin_h = mes_anterior.replace(day=days_in_month if 'days_in_month' in globals() else 28) # o fin de mes
+            f_fin_h = mes_anterior.replace(day=days_in_month if 'days_in_month' in globals() else 28)
         elif rango_seleccionado == "Últimos 6 meses":
             f_ini_h = hoy - pd.Timedelta(days=180)
             f_fin_h = hoy
-        else: # Personalizado
+        else:
             col_f1, col_f2 = st.columns(2)
             with col_f1:
                 f_ini_h = st.date_input("Fecha Inicio", hoy - pd.Timedelta(days=7), key="f_ini_sec_custom")
@@ -880,19 +879,7 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
         dict_reg_all = cargar_puntos_de_control_desde_db()
         dict_reg = {k: v for k, v in dict_reg_all.items() if str(v.get('sector')).strip() == str(sec_id).strip()}
         
-        # 2. Cargar Pozos asociados al sector o globales (asegurando el cruce correcto por sector o ID, ej. P156)
-        pozos_all = cargar_pozos_desde_db() if 'cargar_pozos_desde_db' in globals() else []
-        pozos_sector = [p for p in pozos_all if str(p.get('sector')).strip() == str(sec_id).strip()]
-        
-        if not pozos_sector and 'mapa_pozos_dict' in globals():
-            pozos_sector = [p_info for id_p, p_info in mapa_pozos_dict.items() if str(p_info.get('sector')).strip() == str(sec_id).strip() or str(id_p).strip() == "P156" or str(sec_id).lower() in str(p_info.get('sector', '')).lower()]
-        
-        # Respaldo forzado para asegurar que si el sector tiene asignado el pozo P156, se carguen sus tags de caudal, presión y nivel
-        if 'mapa_pozos_dict' in globals() and "P156" in mapa_pozos_dict:
-            p156 = mapa_pozos_dict["P156"]
-            if p156 not in pozos_sector:
-                pozos_sector.append(p156)
-
+        # 2. Cargar Pozos asociados usando exactamente la estructura de mapa_pozos_dict y ids_p del sector
         tags_sector = []
         mapeo_config = {}
         
@@ -910,19 +897,23 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                     tags_sector.append(tag_v)
                     mapeo_config[tag_v] = {'label': lb, 'color': clr, 'sec': sec}
                     
-        # Recolectar tags de pozos (Caudal, Presión y Nivel/Tanque) con soporte a múltiples nomenclaturas
-        for p_info in pozos_sector:
-            p_nombre = p_info.get('nombre') or p_info.get('pozo') or f"Pozo {p_info.get('id', 'P156')}"
-            conf_pz = [
-                ('tag_q', f"{p_nombre} - Q", '#00d4ff', False),
-                ('tag_p', f"{p_nombre} - P", '#00ff00', True),
-                ('tag_nivel', f"{p_nombre} - Nivel", '#0000FF', True)
-            ]
-            for key_t, lb, clr, sec in conf_pz:
-                tag_v = p_info.get(key_t)
-                if tag_v and str(tag_v).strip().lower() not in ['0', 'none', 'n/a', 'null']:
-                    tags_sector.append(tag_v)
-                    mapeo_config[tag_v] = {'label': lb, 'color': clr, 'sec': sec}
+        # Recolectar pozos vinculados al sector utilizando mapa_pozos_dict y filtrando por sector o ID asignado (ej. P156)
+        if 'mapa_pozos_dict' in globals():
+            ids_p_sector = [id_p for id_p, p_info in mapa_pozos_dict.items() if str(p_info.get('sector')).strip() == str(sec_id).strip() or str(sec_id).lower() in str(p_info.get('sector', '')).lower() or str(id_p).strip() == "P156"]
+            
+            for id_p in ids_p_sector:
+                if id_p in mapa_pozos_dict:
+                    p_info = mapa_pozos_dict[id_p]
+                    conf_pz = [
+                        ('caudal', f"Pozo {id_p} - Q", '#00d4ff', False),
+                        ('presion', f"Pozo {id_p} - P", '#00ff00', True),
+                        ('nivel_tanque', f"Pozo {id_p} - Nivel', '#0000FF', True)
+                    ]
+                    for key_t, lb, clr, sec in conf_pz:
+                        tag_v = p_info.get(key_t)
+                        if tag_v and str(tag_v).strip().lower() not in ['0', 'none', 'n/a', 'null']:
+                            tags_sector.append(tag_v)
+                            mapeo_config[tag_v] = {'label': lb, 'color': clr, 'sec': sec}
                 
         if tags_sector:
             try:
