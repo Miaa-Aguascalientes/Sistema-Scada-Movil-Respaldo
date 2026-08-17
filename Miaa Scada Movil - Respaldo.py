@@ -938,38 +938,45 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
 # 7.10. ------------------------------------------- Histórico Punto de Control y Pozos del Sector (Ancho completo) -------------------------
 st.markdown(f"<h3 style='color:#00d4ff; font-size:18px; text-align: center; margin-bottom:0px;'>Histórico Puntos de control y Pozos</h3>", unsafe_allow_html=True)
 
+# Asegurar que las variables de contexto existan para evitar NameError
+dict_reg = locals().get('dict_reg', {})
+ids_p = locals().get('ids_p', [])
+mapa_pozos_dict = locals().get('mapa_pozos_dict', {})
+
 tags_visualizar = []
 mapeo_config = {}
 
 # 1. Recolección de Puntos de Control (dict_reg)
-for s_id in list(dict_reg.keys()):
-    r_info = dict_reg[s_id]
-    conf_pc = [
-        ('tag_q', f"S:{s_id} - Q", '#00d4ff', False),
-        ('tag_p1', f"S:{s_id} - P1", '#00ff00', True),
-        ('tag_p2', f"S:{s_id} - P2", '#ffff00', True)
-    ]
-    for key_t, lb, clr, sec in conf_pc:
-        tag_v = r_info.get(key_t)
-        if tag_v and str(tag_v).strip().lower() not in ['0', 'none', 'n/a', 'null']:
-            tags_visualizar.append(tag_v)
-            mapeo_config[tag_v] = {'label': lb, 'color': clr, 'sec': sec}
-
-# 2. Recolección de Pozos (mapa_pozos_dict) asegurando los nombres reales de los pozos
-for id_p in ids_p:
-    if id_p in mapa_pozos_dict:
-        p_info = mapa_pozos_dict[id_p]
-        nombre_pozo = p_info.get('nombre', f"Pozo {id_p}")
-        conf_pz = [
-            ('tag_q', f"{nombre_pozo} - Q", '#00d4ff', False),
-            ('tag_p', f"{nombre_pozo} - P", '#00ff00', True),
-            ('tag_nivel', f"{nombre_pozo} - Nivel", '#0000FF', True)
+if dict_reg:
+    for s_id in list(dict_reg.keys()):
+        r_info = dict_reg[s_id]
+        conf_pc = [
+            ('tag_q', f"S:{s_id} - Q", '#00d4ff', False),
+            ('tag_p1', f"S:{s_id} - P1", '#00ff00', True),
+            ('tag_p2', f"S:{s_id} - P2", '#ffff00', True)
         ]
-        for key_t, lb, clr, sec in conf_pz:
-            tag_v = p_info.get(key_t)
+        for key_t, lb, clr, sec in conf_pc:
+            tag_v = r_info.get(key_t)
             if tag_v and str(tag_v).strip().lower() not in ['0', 'none', 'n/a', 'null']:
                 tags_visualizar.append(tag_v)
                 mapeo_config[tag_v] = {'label': lb, 'color': clr, 'sec': sec}
+
+# 2. Recolección de Pozos (mapa_pozos_dict)
+if ids_p and mapa_pozos_dict:
+    for id_p in ids_p:
+        if id_p in mapa_pozos_dict:
+            p_info = mapa_pozos_dict[id_p]
+            nombre_pozo = p_info.get('nombre', f"Pozo {id_p}")
+            conf_pz = [
+                ('tag_q', f"{nombre_pozo} - Q", '#00d4ff', False),
+                ('tag_p', f"{nombre_pozo} - P", '#00ff00', True),
+                ('tag_nivel', f"{nombre_pozo} - Nivel", '#0000FF', True)
+            ]
+            for key_t, lb, clr, sec in conf_pz:
+                tag_v = p_info.get(key_t)
+                if tag_v and str(tag_v).strip().lower() not in ['0', 'none', 'n/a', 'null']:
+                    tags_visualizar.append(tag_v)
+                    mapeo_config[tag_v] = {'label': lb, 'color': clr, 'sec': sec}
 
 # 3. Consulta y Renderizado del gráfico a ancho completo
 if tags_visualizar:
@@ -985,16 +992,13 @@ if tags_visualizar:
             meses_es = {1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr', 5: 'May', 6: 'Jun', 
                          7: 'Jul', 8: 'Ago', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dic'}
 
-            # Rango para las líneas divisorias
             fechas_lineas = pd.date_range(start=df_h['FECHA'].min().floor('D'), 
                                           end=df_h['FECHA'].max().ceil('D'), freq='D')
             
-            # Cálculo del paso para evitar amontonamiento
             num_dias = len(fechas_lineas)
             paso = 1 if num_dias <= 15 else (2 if num_dias <= 30 else 5)
             ticks_filtrados = fechas_lineas[::paso]
 
-            # Creación de etiquetas en español
             etiquetas_filtradas = [
                 f"{d.strftime('%H:%M')}<br>{dias_es[d.dayofweek]} {d.day}-{meses_es[d.month]}-{d.year}"
                 for d in ticks_filtrados
