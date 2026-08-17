@@ -819,6 +819,7 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
         st.error(f"Error cargando tanque: {e}")
 
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
+# ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
 elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != "-- Seleccionar --":
     sec_id = st.session_state.activo_id
     datos_s = next((s for s in sectores if s['sector'] == sec_id), None)
