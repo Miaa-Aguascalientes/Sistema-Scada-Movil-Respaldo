@@ -989,21 +989,21 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                         fig_sec.add_vline(x=d, line_width=1.5, line_dash="dash", 
                                           line_color="#fffb00" if es_lunes else "white", opacity=0.5, layer="above")
                     
-                    # Layout optimizado para móvil: leyenda abajo en formato horizontal y márgenes reducidos
+                    # Layout optimizado para móvil: evita amontonamiento de títulos y fechas
                     fig_sec.update_layout(
                         template="plotly_dark", 
                         paper_bgcolor='rgba(0,0,0,0)', 
                         plot_bgcolor='rgba(0,0,0,0)', 
                         hovermode="x unified",
                         height=420,
-                        margin=dict(t=10, b=10, l=10, r=10),
+                        margin=dict(t=15, b=30, l=10, r=10),
                         xaxis=dict(
                             color="white", 
                             showgrid=False,
                             tickvals=ticks_filtrados, 
                             ticktext=etiquetas_filtradas, 
-                            tickangle=-25,
-                            tickfont=dict(size=9)
+                            tickangle=-45,
+                            tickfont=dict(size=8)
                         ),
                         yaxis=dict(
                             title="Caudales", 
@@ -1023,11 +1023,11 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                         legend=dict(
                             orientation="h", 
                             yanchor="top", 
-                            y=-0.25, 
+                            y=-0.35, 
                             x=0.5, 
                             xanchor="center", 
-                            font=dict(color="white", size=9),
-                            itemwidth=80
+                            font=dict(color="white", size=8),
+                            itemwidth=70
                         )
                     )
                     st.plotly_chart(fig_sec, use_container_width=True)
