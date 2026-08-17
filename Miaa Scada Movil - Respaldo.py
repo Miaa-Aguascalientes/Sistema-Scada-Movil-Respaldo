@@ -929,6 +929,106 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
         else:
             st.info("No hay puntos de control ni pozos vinculados a este sector.")
 
+    # ------------------------------------------------------------------------------ ZONA : VRP (DEBAJO DEL GRÁFICO ANTERIOR) ----------------------------------------------
+        if 'dict_vrp_sec' in locals() and dict_vrp_sec:
+            tags_vrp_global = []
+            mapeo_vrp_global = {}
+            
+            for v_id, v_info in dict_vrp_sec.items():
+                identificador = f"VRP {v_id}" 
+                conf_vrp = [
+                    ('tag_q', f"{identificador} - Q", False),
+                    ('tag_p1', f"{identificador} - P1", True),
+                    ('tag_p2', f"{identificador} - P2", True)
+                ]
+                
+                for key_t, lb, sec in conf_vrp:
+                    t_val = v_info.get(key_t)
+                    if t_val and str(t_val).strip().lower() not in ['0', 'none', 'n/a', 'null']:
+                        tags_vrp_global.append(t_val)
+                        mapeo_vrp_global[t_val] = {'label': lb, 'sec': sec}
+
+            if tags_vrp_global:
+                try:
+                    engine_h = get_mysql_scada_engine()
+                    tags_in_v = "', '".join(list(set(tags_vrp_global)))
+                    q_vrp = f"SELECT h.FECHA, h.VALUE, r.NAME as TAG FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME IN ('{tags_in_v}') AND h.FECHA BETWEEN '{f_ini_h} 00:00:00' AND '{f_fin_h} 23:59:59' ORDER BY h.FECHA ASC"
+                    df_v = pd.read_sql(q_vrp, engine_h)
+                    
+                    if not df_v.empty:
+                        st.markdown(f"<h3 style='color:#00ffcc; font-size:20px; margin-top:25px; margin-bottom:10px;'>Análisis Integral de VRPs del Sector</h3>", unsafe_allow_html=True)
+
+                        df_v['FECHA'] = pd.to_datetime(df_v['FECHA'])
+                        
+                        fig_v = go.Figure()
+                        delta = pd.Timedelta(hours=1)
+                        for d in fechas_lineas:
+                            es_lunes = (d.dayofweek == 0)
+                            fig_v.add_vrect(x0=d - delta, x1=d + delta, fillcolor="gray", opacity=0.2, layer="below", line_width=0)
+                            fig_v.add_vline(x=d, line_width=1.5, line_dash="dash", line_color="#fffb00" if es_lunes else "white", opacity=0.3, layer="above")
+                        
+                        idx_vq = 0
+                        idx_vp = 0
+                        leyenda_vrp_items = []
+
+                        for t_name in tags_vrp_global:
+                            df_t = df_v[df_v['TAG'] == t_name]
+                            if not df_t.empty:
+                                c_vrp = mapeo_vrp_global[t_name]
+                                es_caudal_v = not c_vrp['sec']
+                                unidad_final = "kg/cm²" if ("P1" in c_vrp['label'] or "P2" in c_vrp['label']) else "Lps"
+                                
+                                if es_caudal_v:
+                                    brillo = max(75 - (idx_vq * 15), 35)
+                                    color_v = f"hsl(200, 100%, {brillo}%)" 
+                                    idx_vq += 1
+                                else:
+                                    brillo = max(80 - (idx_vp * 15), 30)
+                                    color_v = f"hsl(150, 100%, {brillo}%)"
+                                    idx_vp += 1
+
+                                fig_v.add_trace(go.Scatter(
+                                    x=df_t['FECHA'], 
+                                    y=df_t['VALUE'], 
+                                    name=c_vrp['label'], 
+                                    yaxis="y2" if c_vrp['sec'] else "y1", 
+                                    mode='lines+markers',
+                                    line=dict(width=1.8, color=color_v),
+                                    marker=dict(size=3 if es_caudal_v else 4, symbol='circle'),
+                                    fill='tozeroy' if es_caudal_v else None,
+                                    fillcolor=color_v.replace("hsl", "hsla").replace(")", ", 0.12)"),
+                                    hovertemplate=f'<b>%{{fullData.name}}</b>: %{{y:.2f}} {unidad_final}<extra></extra>'
+                                ))
+                                leyenda_vrp_items.append({"label": c_vrp['label'], "color": color_v})
+
+                        fig_v.update_layout(
+                            template="plotly_dark",
+                            paper_bgcolor='rgba(0,0,0,0)', 
+                            plot_bgcolor='rgba(0,0,0,0)', 
+                            height=400,
+                            width=1400,
+                            autosize=False,
+                            margin=dict(t=30, b=30, l=10, r=10), 
+                            hovermode="x unified", 
+                            showlegend=False,
+                            xaxis=dict(color="white", showgrid=False, tickvals=ticks_filtrados, ticktext=etiquetas_filtradas, tickangle=0, tickformat="%d-%b-%Y %H:%M"),
+                            yaxis=dict(title="Caudal (Lps)", color="#00d4ff", tickformat=".2f"),
+                            yaxis2=dict(title="Presión (kg)", side="right", overlaying="y", color="#00ff00", showgrid=False, tickformat=".2f")
+                        )
+                        
+                        st.markdown("<p style='color:#00ffcc; font-weight:bold; margin-bottom:5px; font-size:13px;'>Variables en este gráfico de VRPs:</p>", unsafe_allow_html=True)
+                        items_vrp_html = "".join([f'<div style="display:flex; align-items:center; margin-bottom:6px; overflow:hidden;"><span style="height:10px; width:16px; background-color:{item["color"]}; display:inline-block; margin-right:5px; border-radius:2px; flex-shrink:0;"></span><span style="color:white; font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{item["label"]}</span></div>' for item in leyenda_vrp_items])
+                        st.markdown(f'<div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 6px 10px; width:100%; margin-bottom:10px;">{items_vrp_html}</div>', unsafe_allow_html=True)
+
+                        st.markdown('<div class="scrollable-chart">', unsafe_allow_html=True)
+                        st.plotly_chart(fig_v, use_container_width=True)
+                        st.markdown('</div>', unsafe_allow_html=True)
+                        
+                    else:
+                        st.info("No se encontraron registros telemétricos para las VRPs en este sector.")
+                except Exception as e:
+                    st.error(f"Error Scada VRP: {e}")
+
 
     # -------------------------------------------------------------------------Parte final ---- -----------------------------------------------------------------------------------    
     st.markdown("""
