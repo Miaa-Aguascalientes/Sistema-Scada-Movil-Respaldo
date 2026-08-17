@@ -896,7 +896,6 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                         )
                     )
                     
-                    # LEYENDA FORZADA EN 3 COLUMNAS CON FLEXBOX (Incluso en modo vertical)
                     st.markdown("<p style='color:#00d4ff; font-weight:bold; margin-bottom:5px; font-size:13px;'>Variables en este gráfico:</p>", unsafe_allow_html=True)
                     
                     html_leyenda = '<div style="display: flex; flex-wrap: wrap; width: 100%; margin-bottom: 10px;">'
@@ -909,9 +908,9 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                         '''
                     html_leyenda += '</div>'
                     
+                    # AQUÍ FALTABA EL unsafe_allow_html=True QUE HIZO QUE SE IMPRIMIERA EL TEXTO PLANO
                     st.markdown(html_leyenda, unsafe_allow_html=True)
 
-                    # Contenedor con scroll horizontal para el gráfico
                     st.markdown("""
                         <style>
                         .scrollable-chart {
