@@ -819,7 +819,6 @@ elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != 
         st.error(f"Error cargando tanque: {e}")
 
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
-# ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
 elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != "-- Seleccionar --":
     sec_id = st.session_state.activo_id
     datos_s = next((s for s in sectores if s['sector'] == sec_id), None)
@@ -827,7 +826,7 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
     if datos_s:
         st.markdown(f"<h3 style='color:#00d4ff;'>🏘️ Sector Hidráulico: {sec_id}</h3>", unsafe_allow_html=True)
         
-        # Grid compacto de Tarjetas
+        # Grid compacto de Tarjetas de Información Técnica del Sector (KPIs)
         sc1, sc2, sc3 = st.columns(3)
         with sc1:
             st.markdown(f'<div class="card-indicador"><p class="label-indicador">Superficie</p><p class="value-indicador">{datos_s.get("Superficie",0):,.1f} ha</p></div>', unsafe_allow_html=True)
@@ -839,37 +838,82 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
             st.markdown(f'<div class="card-indicador"><p class="label-indicador">Consumo Mensual</p><p class="value-indicador">{datos_s.get("Cons_m3",0):,.1f} m³</p></div>', unsafe_allow_html=True)
             st.markdown(f'<div class="card-indicador"><p class="label-indicador">Eficiencia / Balance</p><p class="value-indicador">{datos_s.get("Balance_Estimado",0):,.1f}%</p></div>', unsafe_allow_html=True)
             
+        # Gráficos Históricos del Sector
         st.markdown("<h4 style='color:#00d4ff;'>📈 Histórico Puntos de control y Pozos</h4>", unsafe_allow_html=True)
         
         opciones_tiempo = ["Hoy", "Ayer", "Últimos 7 días", "Últimos 14 días", "Este Mes", "Último Mes", "Últimos 6 meses", "Personalizado"]
         rango_seleccionado = st.selectbox("Seleccione el periodo a mostrar", opciones_tiempo, index=2, key="rango_tiempo_sec")
         
         hoy = pd.to_datetime("today").normalize()
-        # [Lógica de fechas simplificada para brevedad]
-        if rango_seleccionado == "Hoy": f_ini_h, f_fin_h = hoy, hoy
-        elif rango_seleccionado == "Ayer": f_ini_h, f_fin_h = hoy - pd.Timedelta(days=1), hoy - pd.Timedelta(days=1)
-        elif rango_seleccionado == "Últimos 7 días": f_ini_h, f_fin_h = hoy - pd.Timedelta(days=7), hoy
-        elif rango_seleccionado == "Últimos 14 días": f_ini_h, f_fin_h = hoy - pd.Timedelta(days=14), hoy
-        elif rango_seleccionado == "Este Mes": f_ini_h, f_fin_h = hoy.replace(day=1), hoy
-        elif rango_seleccionado == "Últimos 6 meses": f_ini_h, f_fin_h = hoy - pd.Timedelta(days=180), hoy
+        if rango_seleccionado == "Hoy":
+            f_ini_h = hoy
+            f_fin_h = hoy
+        elif rango_seleccionado == "Ayer":
+            f_ini_h = hoy - pd.Timedelta(days=1)
+            f_fin_h = hoy - pd.Timedelta(days=1)
+        elif rango_seleccionado == "Últimos 7 días":
+            f_ini_h = hoy - pd.Timedelta(days=7)
+            f_fin_h = hoy
+        elif rango_seleccionado == "Últimos 14 días":
+            f_ini_h = hoy - pd.Timedelta(days=14)
+            f_fin_h = hoy
+        elif rango_seleccionado == "Este Mes":
+            f_ini_h = hoy.replace(day=1)
+            f_fin_h = hoy
+        elif rango_seleccionado == "Último Mes":
+            import calendar
+            mes_anterior = hoy.replace(day=1) - pd.Timedelta(days=1)
+            ultimo_dia = calendar.monthrange(mes_anterior.year, mes_anterior.month)[1]
+            f_ini_h = mes_anterior.replace(day=1)
+            f_fin_h = mes_anterior.replace(day=ultimo_dia)
+        elif rango_seleccionado == "Últimos 6 meses":
+            f_ini_h = hoy - pd.Timedelta(days=180)
+            f_fin_h = hoy
         else:
             col_f1, col_f2 = st.columns(2)
-            with col_f1: f_ini_h = st.date_input("Fecha Inicio", hoy - pd.Timedelta(days=7))
-            with col_f2: f_fin_h = st.date_input("Fecha Fin", hoy)
+            with col_f1:
+                f_ini_h = st.date_input("Fecha Inicio", hoy - pd.Timedelta(days=7), key="f_ini_sec_custom")
+            with col_f2:
+                f_fin_h = st.date_input("Fecha Fin", hoy, key="f_fin_sec_custom")
 
-        # Carga de datos (Simplificado igual que tu original)
+        # 1. Cargar Puntos de control asignados al sector
         dict_reg_all = cargar_puntos_de_control_desde_db()
         dict_reg = {k: v for k, v in dict_reg_all.items() if str(v.get('sector')).strip() == str(sec_id).strip()}
         
-        tags_sector, mapeo_config = [], {}
-        # [Aquí va tu lógica de recolección de tags que ya tenías]
+        # 2. Cargar Pozos asociados usando exactamente la estructura de mapa_pozos_dict y ids_p del sector
+        tags_sector = []
+        mapeo_config = {}
+        
         for r_id, r_info in dict_reg.items():
-            conf_pc = [('tag_q', f"S:{r_id}-Q", '#00d4ff', False), ('tag_p1', f"S:{r_id}-P1", '#00ff00', True), ('tag_p2', f"S:{r_id}-P2", '#ffff00', True)]
-            for kt, lb, cl, sc in conf_pc:
-                tv = r_info.get(kt)
-                if tv and str(tv).strip().lower() not in ['0', 'none', 'n/a', 'null']:
-                    tags_sector.append(tv); mapeo_config[tv] = {'label': lb, 'color': cl, 'sec': sc}
-
+            nombre_disp = f"S:{r_id}"
+            conf_pc = [
+                ('tag_q', f"{nombre_disp} - Q", '#00d4ff', False),
+                ('tag_p1', f"{nombre_disp} - P1", '#00ff00', True),
+                ('tag_p2', f"{nombre_disp} - P2", '#ffff00', True)
+            ]
+            for key_t, lb, clr, sec in conf_pc:
+                tag_v = r_info.get(key_t)
+                if tag_v and str(tag_v).strip().lower() not in ['0', 'none', 'n/a', 'null']:
+                    tags_sector.append(tag_v)
+                    mapeo_config[tag_v] = {'label': lb, 'color': clr, 'sec': sec}
+                    
+        if 'mapa_pozos_dict' in globals():
+            ids_p_sector = [id_p for id_p, p_info in mapa_pozos_dict.items() if str(p_info.get('sector')).strip() == str(sec_id).strip() or str(sec_id).lower() in str(p_info.get('sector', '')).lower() or str(id_p).strip() == "P156"]
+            
+            for id_p in ids_p_sector:
+                if id_p in mapa_pozos_dict:
+                    p_info = mapa_pozos_dict[id_p]
+                    conf_pz = [
+                        ('caudal', f"Pozo {id_p} - Q", '#00d4ff', False),
+                        ('presion', f"Pozo {id_p} - P", '#00ff00', True),
+                        ('nivel_tanque', f"Pozo {id_p} - Nivel", '#0000FF', True)
+                    ]
+                    for key_t, lb, clr, sec in conf_pz:
+                        tag_v = p_info.get(key_t)
+                        if tag_v and str(tag_v).strip().lower() not in ['0', 'none', 'n/a', 'null']:
+                            tags_sector.append(tag_v)
+                            mapeo_config[tag_v] = {'label': lb, 'color': clr, 'sec': sec}
+                
         if tags_sector:
             try:
                 engine_h = get_mysql_scada_engine()
@@ -879,50 +923,137 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                 
                 if not df_sec.empty:
                     df_sec['FECHA'] = pd.to_datetime(df_sec['FECHA'])
-                    fechas_lineas = pd.date_range(start=df_sec['FECHA'].min().floor('D'), end=df_sec['FECHA'].max().ceil('D'), freq='D')
                     
-                    # CSS para obligar a que el gráfico sea ancho y tenga scroll horizontal
-                    st.markdown("""
-                        <style>
-                        .scroll-container { overflow-x: auto; width: 100%; }
-                        .scroll-content { min-width: 900px; height: 450px; }
-                        </style>
-                    """, unsafe_allow_html=True)
+                    dias_es = {0: 'Lun', 1: 'Mar', 2: 'Mié', 3: 'Jue', 4: 'Vie', 5: 'Sáb', 6: 'Dom'}
+                    meses_es = {1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr', 5: 'May', 6: 'Jun', 
+                                 7: 'Jul', 8: 'Ago', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dic'}
 
+                    fechas_lineas = pd.date_range(start=df_sec['FECHA'].min().floor('D'), 
+                                                  end=df_sec['FECHA'].max().ceil('D'), freq='D')
+                    
+                    num_dias = len(fechas_lineas)
+                    paso = 1 if num_dias <= 15 else (2 if num_dias <= 30 else 5)
+                    ticks_filtrados = fechas_lineas[::paso]
+
+                    etiquetas_filtradas = [
+                        f"{d.strftime('%H:%M')}<br>{dias_es[d.dayofweek]} {d.day}-{meses_es[d.month]}-{d.year}"
+                        for d in ticks_filtrados
+                    ]
+                
                     fig_sec = go.Figure()
-                    # [Aquí va tu bucle de add_trace existente...]
-                    # (Asegúrate de mantener tu lógica de colores y traces)
+                    idx_q = 0
+                    idx_p = 0
+
+                    for tag_name in tags_sector:
+                        df_tag = df_sec[df_sec['TAG'] == tag_name]
+                        if not df_tag.empty:
+                            cfg = mapeo_config[tag_name]
+                            es_caudal = not cfg['sec']
+                            label_u = cfg['label'].upper()
+
+                            if es_caudal:
+                                unidad_pc = "Lps"
+                            elif "NIVEL" in label_u or "TANQUE" in label_u or "MTS" in label_u:
+                                unidad_pc = "Mts"
+                            else:
+                                unidad_pc = "kg/cm²"
+                            
+                            if es_caudal:
+                                brillo = max(75 - (idx_q * 15), 35) 
+                                color_base = f"hsl(200, 100%, {brillo}%)" 
+                                idx_q += 1
+                            else:
+                                brillo = max(80 - (idx_p * 20), 30)
+                                color_base = f"hsl(145, 100%, {brillo}%)"
+                                idx_p += 1
+
+                            fig_sec.add_trace(go.Scatter(
+                                x=df_tag['FECHA'], 
+                                y=df_tag['VALUE'], 
+                                name=cfg['label'], 
+                                yaxis="y2" if cfg['sec'] else "y1", 
+                                mode='lines+markers',
+                                line=dict(width=1.8, color=color_base),
+                                marker=dict(size=3, symbol='circle'),
+                                fill='tozeroy' if es_caudal else None,
+                                fillcolor=color_base.replace("hsl", "hsla").replace(")", ", 0.15)"),
+                                hovertemplate='<b>%{fullData.name}</b>: %{y:.2f} ' + unidad_pc + '<extra></extra>'
+                            ))
+
+                    delta = pd.Timedelta(hours=1)
+                    for d in fechas_lineas:
+                        es_lunes = (d.dayofweek == 0)
+                        fig_sec.add_vrect(x0=d - delta, x1=d + delta, fillcolor="gray", opacity=0.2, layer="below", line_width=0)
+                        fig_sec.add_vline(x=d, line_width=1.5, line_dash="dash", 
+                                            line_color="#fffb00" if es_lunes else "white", opacity=0.5, layer="above")
                     
                     fig_sec.update_layout(
                         template="plotly_dark", 
+                        paper_bgcolor='rgba(0,0,0,0)', 
+                        plot_bgcolor='rgba(0,0,0,0)', 
                         hovermode="x unified",
-                        margin=dict(t=80, b=50, l=40, r=40),
-                        # La clave para que no se amontone la leyenda:
+                        height=420,
+                        margin=dict(t=80, b=30, l=10, r=10),
+                        xaxis=dict(
+                            color="white", 
+                            showgrid=False,
+                            tickvals=ticks_filtrados, 
+                            ticktext=etiquetas_filtradas, 
+                            tickangle=0,
+                            tickformat="%d-%b-%Y %H:%M"
+                        ),
+                        yaxis=dict(
+                            title="Caudales (m³/h)", 
+                            color="#00d4ff", 
+                            tickformat=".2f"
+                        ),
+                        yaxis2=dict(
+                            title="Presiones / Niveles", 
+                            overlaying="y", 
+                            side="right", 
+                            color="#00ff00", 
+                            showgrid=False, 
+                            tickformat=".2f"
+                        ),
                         legend=dict(
                             orientation="h", 
-                            yanchor="bottom", y=1.05, 
-                            xanchor="center", x=0.5,
-                            font=dict(size=10),
-                            tracegroupgap=10
-                        ),
-                        xaxis=dict(
-                            tickangle=0, 
-                            tickformat="%d %b", 
-                            showgrid=False
-                        ),
-                        yaxis=dict(title="Caudal", color="#00d4ff"),
-                        yaxis2=dict(title="Presión/Nivel", overlaying="y", side="right", color="#00ff00")
+                            yanchor="bottom", 
+                            y=1.12, 
+                            x=0.5, 
+                            xanchor="center", 
+                            font=dict(color="white", size=10)
+                        )
                     )
-
-                    # Mostrar con contenedor de scroll
-                    st.markdown('<div class="scroll-container"><div class="scroll-content">', unsafe_allow_html=True)
+                    
+                    # Contenedor CSS para asegurar visibilidad y scroll horizontal sin amontonar
+                    st.markdown("""
+                        <style>
+                        .scrollable-chart {
+                            overflow-x: auto;
+                            width: 100%;
+                            padding-bottom: 15px;
+                        }
+                        .scrollable-chart > div {
+                            min-width: 900px;
+                        }
+                        </style>
+                    """, unsafe_allow_html=True)
+                    
+                    st.markdown('<div class="scrollable-chart">', unsafe_allow_html=True)
                     st.plotly_chart(fig_sec, use_container_width=True)
-                    st.markdown('</div></div>', unsafe_allow_html=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
+
                 else:
-                    st.info("Sin registros telemétricos.")
+                    st.info("Sin registros telemétricos en el rango de fechas seleccionado para este sector.")
             except Exception as e:
-                st.error(f"Error: {e}")
-    # Vista Default (HUD de Bienvenida) cuando no hay ningún elemento activo seleccionado
+                st.error(f"Error Scada: {e}")
+        else:
+            st.info("No hay puntos de control ni pozos vinculados a este sector.")
+
+
+
+    
+    # -------------------------------------------------------------------------Parte final ---- -----------------------------------------------------------------------------------    
     st.markdown("""
     <div style="text-align: center; margin-top: 40px; padding: 20px; background: rgba(0,212,255,0.02); border: 1px dashed #1f4068; border-radius: 10px;">
         <p style="color: #00d4ff; font-family: 'Orbitron', sans-serif; font-size: 14px; margin: 0;">
