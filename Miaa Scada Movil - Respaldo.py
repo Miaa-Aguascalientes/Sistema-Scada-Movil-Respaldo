@@ -907,7 +907,7 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                     conf_pz = [
                         ('caudal', f"Pozo {id_p} - Q", '#00d4ff', False),
                         ('presion', f"Pozo {id_p} - P", '#00ff00', True),
-                        ('nivel_tanque', f"Pozo {id_p} - Nivel', '#0000FF', True)
+                        ('nivel_tanque', f"Pozo {id_p} - Nivel", '#0000FF', True)
                     ]
                     for key_t, lb, clr, sec in conf_pz:
                         tag_v = p_info.get(key_t)
