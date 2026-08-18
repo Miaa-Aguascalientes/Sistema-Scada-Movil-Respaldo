@@ -1202,6 +1202,62 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
         else:
             st.info("No hay VRPs configuradas para este sector.")
 
+    # ==============================================================================
+        # 3. GRÁFICO 3: PUNTOS CRÍTICOS (NUEVO BLOQUE INTEGRADO)
+        # ==============================================================================
+        if 'dict_pc_sec' in locals() and dict_pc_sec:
+            tags_pc_list = [v['tag_p1'] for v in dict_pc_sec.values() if v.get('tag_p1')]
+            if tags_pc_list:
+                try:
+                    tags_pc_in = "', '".join(tags_pc_list)
+                    df_pc_h = pd.read_sql(f"SELECT h.FECHA, h.VALUE, r.NAME as TAG FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME IN ('{tags_pc_in}') AND h.FECHA BETWEEN '{str_f_ini}' AND '{str_f_fin}' ORDER BY h.FECHA ASC", engine_h)
+
+                    if not df_pc_h.empty:
+                        st.markdown(f"<h3 style='color:#ff0000; font-size:18px; margin-top:25px; margin-bottom:10px; text-align: center;'>Puntos críticos del sector:</h3>", unsafe_allow_html=True)
+                        
+                        df_pc_h['FECHA'] = pd.to_datetime(df_pc_h['FECHA'])
+                        
+                        fig_pc = go.Figure()
+                        
+                        delta = pd.Timedelta(hours=1)
+                        for d in fechas_lineas:
+                            es_lunes = (d.dayofweek == 0)
+                            fig_pc.add_vrect(x0=d - delta, x1=d + delta, fillcolor="gray", opacity=0.2, layer="below", line_width=0)
+                            fig_pc.add_vline(x=d, line_width=1.5, line_dash="dash", line_color="#fffb00" if es_lunes else "white", opacity=0.5, layer="above")
+
+                        tag_to_name = {v['tag_p1']: v.get('Domicilio', v.get('nombre', 'S/D')) for v in dict_pc_sec.values()}
+
+                        for tag in tags_pc_list:
+                            df_temp = df_pc_h[df_pc_h['TAG'] == tag]
+                            if not df_temp.empty:
+                                fig_pc.add_trace(go.Scatter(
+                                    x=df_temp['FECHA'], y=df_temp['VALUE'], 
+                                    name=tag_to_name.get(tag, tag), mode='lines+markers',
+                                    marker=dict(size=4, symbol='circle'), line=dict(width=2),
+                                    hovertemplate='<b>%{fullData.name}</b><br>Valor: %{y:.2f} kg<extra></extra>'
+                                ))
+
+                        fig_pc.update_layout(
+                            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=300, width=1800, autosize=False,
+                            margin=dict(l=50, r=50, t=40, b=10), hovermode="x unified",
+                            xaxis=dict(
+                                color="white", 
+                                showgrid=False,
+                                tickvals=ticks_filtrados, 
+                                ticktext=etiquetas_filtradas, 
+                                tickangle=0, 
+                                tickformat="%d-%b-%Y %H:%M"
+                            ),
+                            yaxis=dict(tickformat=".2f", color="white"),
+                            legend=dict(orientation="h", yanchor="bottom", y=1.05, x=0.5, xanchor="center", font=dict(color="white", size=10))
+                        )
+                        
+                        st.markdown('<div class="scrollable-chart">', unsafe_allow_html=True)
+                        st.plotly_chart(fig_pc, use_container_width=True)
+                        st.markdown('</div>', unsafe_allow_html=True)
+                except Exception as e:
+                    st.error(f"Error PC: {e}")
+
 
     # -------------------------------------------------------------------------Parte final ---- -----------------------------------------------------------------------------------    
     st.markdown("""
