@@ -701,8 +701,238 @@ if st.session_state.activo_tipo == "Pozo" and st.session_state.activo_id != "-- 
             unsafe_allow_html=True
         )
 
+# ------------------------------------------------------------------------------ seccion de tanques ------------------------------------------------------------------------
+
+elif st.session_state.activo_tipo == "Tanque" and st.session_state.activo_id != "-- Seleccionar --":
+    id_tq = st.session_state.activo_id
+    info_t = mapa_tanques_dict.get(id_tq)
+    
+    st.markdown(f"<h3 style='color:#00d4ff;'>🛢️  Análisis de Nivel: {info_t['nombre']}</h3>", unsafe_allow_html=True)
+
+    # --- OBTENER DATOS ---
+    data_tq = cargar_datos_scada([info_t['tag_nivel']])
+    ultimo_nivel, fecha_lectura = data_tq.get(info_t['tag_nivel'], (0.0, "N/A"))
+    nivel_max = info_t.get('nivel_max', 0.0)
+    
+    # Renderizar el indicador visual con los textos compactados
+    st.markdown(f'''
+        <div style="border: 2px solid #00d4ff; padding: 10px; border-radius: 12px; text-align: center; margin-bottom: 20px; background: rgba(0, 212, 255, 0.05);">
+            <p style="color: white; font-size: 12px; margin: 0; line-height: 1; font-weight: bold;">Nivel de tanque actual</p>
+            <p style="color: white; font-size: 32px; font-weight: bold; margin: -5px 0 0 0; line-height: 1.2;">
+                {float(ultimo_nivel):,.2f} <span style="font-size: 18px; color: #00d4ff;">Mts</span>
+            </p>
+            <div style="margin-top: 2px;">
+                <p style="color: #cccccc; font-size: 12px; margin: 0; line-height: 1.4;">
+                    Nivel Máximo: <span style="color: #00d4ff; font-weight: bold;">{float(nivel_max):,.2f} Mts</span>
+                </p>
+                <p style="color: white; font-size: 12px; margin: 0; line-height: 1;">Última lectura: {fecha_lectura}</p>
+            </div>
+        </div>
+    ''', unsafe_allow_html=True)
+    
+# 1. Definición de opciones
+    opciones = ["Hoy", "Ayer", "Últimos 7 días", "Últimos 14 días", "Este Mes", "Último Mes", "Últimos 6 meses", "Personalizado"]
+    opcion_fecha = st.selectbox("Selecciona rango:", opciones, index=2) # Index 0 para empezar en 'Hoy'
+    
+    hoy_dt = datetime.now()
+    f_fin = hoy_dt
+    
+    # 2. Lógica extendida para calcular fechas
+    if opcion_fecha == "Hoy":
+        f_ini = hoy_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif opcion_fecha == "Ayer":
+        f_ini = hoy_dt - timedelta(days=1)
+    elif opcion_fecha == "Últimos 7 días":
+        f_ini = hoy_dt - timedelta(days=7)
+    elif opcion_fecha == "Últimos 14 días":
+        f_ini = hoy_dt - timedelta(days=14)
+    elif opcion_fecha == "Este Mes":
+        f_ini = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    elif opcion_fecha == "Último Mes":
+        # Primer día del mes actual menos un día nos da el mes anterior
+        primer_dia_actual = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        f_ini = (primer_dia_actual - timedelta(days=1)).replace(day=1)
+        f_fin = primer_dia_actual - timedelta(seconds=1)
+    elif opcion_fecha == "Últimos 6 meses":
+        f_ini = hoy_dt - timedelta(days=180)
+    elif opcion_fecha == "Personalizado":
+        rango = st.date_input("Selecciona rango:", [hoy_dt - timedelta(days=7), hoy_dt])
+        if len(rango) == 2:
+            f_ini, f_fin = rango[0], rango[1]
+        else:
+            f_ini = hoy_dt - timedelta(days=7)
+
+    # 3. Consulta SQL ajustada con las nuevas variables
+    try:
+        engine = get_mysql_scada_engine()
+        # Convertimos las fechas a string con formato explícito para evitar errores de interpretación
+        f_ini_str = f_ini.strftime('%Y-%m-%d %H:%M:%S')
+        f_fin_str = f_fin.strftime('%Y-%m-%d %H:%M:%S') if isinstance(f_fin, datetime) else f_fin.strftime('%Y-%m-%d %H:%M:%S')
+        
+        query = f"""
+            SELECT h.FECHA, h.VALUE FROM vfitagnumhistory h
+            JOIN VfiTagRef r ON h.GATEID = r.GATEID
+            WHERE r.NAME = '{info_t['tag_nivel']}' 
+            AND h.FECHA BETWEEN '{f_ini_str}' AND '{f_fin_str}'
+            ORDER BY h.FECHA ASC
+        """
+        df_hist = pd.read_sql(query, engine)
+        
+        if not df_hist.empty:
+            df_hist['FECHA'] = pd.to_datetime(df_hist['FECHA'])
+            
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=df_hist['FECHA'],
+                y=df_hist['VALUE'],
+                name="Nivel Tq",
+                mode='lines+markers', 
+                line=dict(color='#00ffcc', width=2),
+                fill='tozeroy',
+                fillcolor='rgba(0, 255, 204, 0.1)',
+                hovertemplate="<b>Nivel</b>: %{y:.2f} m<extra></extra>"
+            ))
+            
+            fig.update_layout(
+                template="plotly_dark",
+                height=300,
+                margin=dict(t=60, b=80, l=10, r=10),
+                paper_bgcolor='rgba(0,0,0,0)', 
+                plot_bgcolor='rgba(0,0,0,0)',
+                hovermode="x unified",
+                showlegend=True,
+                legend=dict(
+                    orientation="h",
+                    y=1.2,
+                    x=0.5,
+                    xanchor="center",
+                    font=dict(size=10, color='white')
+                ),    
+                xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)', color='white'),
+                yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)', color='white')
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("Sin datos para este tanque en el periodo elegido.")
+    except Exception as e:
+        st.error(f"Error cargando tanque: {e}")
 
 # ------------------------------------------------------------------------------ seccion de rebombeos ------------------------------------------------------------------------
+
+elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id != "-- Seleccionar --":
+    id_rb = st.session_state.activo_id
+    info_rb = mapa_rebombeos_dict.get(id_rb)
+    
+    if info_rb:
+        st.markdown(f"<h3 style='color:#00d4ff;'>🧊 Rebombeo: {info_rb['nombre']}</h3>", unsafe_allow_html=True)
+        
+        # 1. Selector de Rango de Fechas
+        opciones = ["Hoy", "Ayer", "Últimos 7 días", "Últimos 14 días", "Este Mes", "Último Mes", "Últimos 6 meses", "Personalizado"]
+        opcion_fecha = st.selectbox("Rango de tiempo:", opciones, index=2, key="sel_rango_rb")
+        
+        hoy_dt = datetime.now()
+        f_fin = hoy_dt
+        if opcion_fecha == "Hoy": f_ini = hoy_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        elif opcion_fecha == "Ayer": 
+            f_ini = (hoy_dt - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            f_fin = hoy_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        elif opcion_fecha == "Últimos 7 días": f_ini = hoy_dt - timedelta(days=7)
+        elif opcion_fecha == "Últimos 14 días": f_ini = hoy_dt - timedelta(days=14)
+        elif opcion_fecha == "Este Mes": f_ini = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        elif opcion_fecha == "Último Mes":
+            primer_dia_actual = hoy_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            f_ini = (primer_dia_actual - timedelta(days=1)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            f_fin = primer_dia_actual - timedelta(seconds=1)
+        elif opcion_fecha == "Últimos 6 meses": f_ini = hoy_dt - timedelta(days=180)
+        else:
+            rango = st.date_input("Selecciona rango:", [hoy_dt - timedelta(days=7), hoy_dt], key="date_rb")
+            f_ini = pd.to_datetime(rango[0]) if len(rango) == 2 else hoy_dt - timedelta(days=7)
+            if len(rango) == 2: f_fin = pd.to_datetime(rango[1]).replace(hour=23, minute=59, second=59)
+
+        # 2. Consulta a BD
+        engine = get_mysql_scada_engine()
+        tag_p, tag_n = info_rb.get('presion'), info_rb.get('nivel_tanque')
+        tag_sd, tag_sn = info_rb.get('setpoint_dia'), info_rb.get('setpoint_noche')
+        
+        tags_todos = [t for t in [tag_p, tag_n, tag_sd, tag_sn] if t]
+        tags_str = ",".join([f"'{t}'" for t in tags_todos])
+        
+        query = f"""
+            SELECT h.FECHA, h.VALUE, r.NAME as TAG
+            FROM vfitagnumhistory h
+            JOIN VfiTagRef r ON h.GATEID = r.GATEID
+            WHERE r.NAME IN ({tags_str})
+            AND h.FECHA BETWEEN '{f_ini.strftime('%Y-%m-%d %H:%M:%S')}' AND '{f_fin.strftime('%Y-%m-%d %H:%M:%S')}'
+            ORDER BY h.FECHA ASC
+        """
+        df_hist = pd.read_sql(query, engine)
+        
+        if not df_hist.empty:
+            df_hist['FECHA'] = pd.to_datetime(df_hist['FECHA'])
+            df_hist = df_hist.sort_values('FECHA')
+            ultimos = df_hist.groupby('TAG').last()
+
+            # Renderizado de Estado
+            p_val = ultimos.loc[tag_p, 'VALUE'] if tag_p in ultimos.index else 0
+            estado_texto = "Sistema Encendido" if float(p_val) >= 0.100 else "Sistema Apagado"
+            color_estado = "#00ff00" if float(p_val) >= 0.100 else "#ff4b4b"
+            
+            st.markdown(f"""
+            <div style="border: 2px solid {color_estado}; padding: 10px; border-radius: 10px; text-align: center; margin-bottom: 20px;">
+                <p style="margin: 0; font-size: 12px; color: #FFFFFF;">ESTADO DEL SISTEMA</p>
+                <h3 style="margin: 0; color: {color_estado};">{estado_texto}</h3>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Función Métricas
+            def metric_con_icono_al_lado(label, val_tag, icon, unit):
+                val = ultimos.loc[val_tag, 'VALUE'] if val_tag in ultimos.index else 0
+                fecha_obj = ultimos.loc[val_tag, 'FECHA'] if val_tag in ultimos.index else None
+                
+                # Conversión específica para las variables de setpoint indicadas
+                if val_tag in ["RB_099_TRM_SET_POINT_DIA", "RB_099_TRM_SET_POINT_NOCHE"]:
+                    val = val / 100.0
+                
+                if fecha_obj:
+                    meses = {
+                        1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio",
+                        7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
+                    }
+                    mes_nombre = meses[fecha_obj.month]
+                    fecha_str = f"{fecha_obj.day:02d}/{mes_nombre}/{fecha_obj.year} {fecha_obj.strftime('%H:%M')}"
+                else:
+                    fecha_str = "N/A"
+                
+                st.markdown("<hr style='border: 0; border-top: 1px solid #FFFFFF; margin: 2px 0 5px 0;'>", unsafe_allow_html=True)
+                st.markdown(f"<p style='font-size: 18px; margin-bottom: 2px; color: #FFFFFF; text-align: center;'>{label}</p>", unsafe_allow_html=True)
+                
+                st.markdown(f"""
+                <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 15px;">
+                    <h2 style="margin: 0; font-size: 24px;">{icon} {val:.2f} <span style='font-size: 16px;'>{unit}</span></h2>
+                    <p style="margin: 0; font-size: 16px; color: #FFFFFF; align-self: flex-end;">{fecha_str}</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # --- Renderizado de Métricas ---
+            metric_con_icono_al_lado("Presión actual del Sistema", tag_p, "🕛", "Kg/cm²")
+            metric_con_icono_al_lado("Nivel actual de Tanque", tag_n, "🛢️", "mts")
+            metric_con_icono_al_lado("Ajuste Setpoint Día", tag_sd, "☀️", "Kg/cm²")
+            metric_con_icono_al_lado("Ajuste Setpoint Noche", tag_sn, "🌙", "Kg/cm²")
+
+            # Gráfico
+            st.markdown("<hr style='border: 0; border-top: 2px solid #00d4ff; margin: 20px 0;'>", unsafe_allow_html=True)
+            st.markdown("<h4 style='color:#00d4ff; font-size:14px;'>Histórico: Presión y Nivel de Tanque</h4>", unsafe_allow_html=True)
+            
+            fig_rb = go.Figure()
+            df_n, df_p = df_hist[df_hist['TAG'] == tag_n], df_hist[df_hist['TAG'] == tag_p]
+            fig_rb.add_trace(go.Scatter(x=df_n['FECHA'], y=df_n['VALUE'].round(2), name='Nivel (Mts)', mode='lines+markers', line=dict(color='#00d4ff', width=2), marker=dict(size=4)))
+            fig_rb.add_trace(go.Scatter(x=df_p['FECHA'], y=df_p['VALUE'].round(2), name='Presión (Kg/cm²)', mode='lines+markers', line=dict(color='#00ff00', width=2), marker=dict(size=4), yaxis="y2"))
+            
+            fig_rb.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', hovermode="x unified", height=280, margin=dict(t=40, b=40, l=0, r=0), yaxis=dict(title="Nivel (m)"), yaxis2=dict(title="Presión (Kg/cm²)", overlaying="y", side="right"), legend=dict(orientation="h", y=1.2))
+            st.plotly_chart(fig_rb, use_container_width=True)
+        else:
+            st.warning("No hay datos históricos para el rango seleccionado.")
+# ------------------------------------------------------------------------------ seccion de sectores ------------------------------------------------------------------------
 elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != "-- Seleccionar --":
     sec_id = st.session_state.activo_id
     datos_s = next((s for s in sectores if s['sector'] == sec_id), None)
