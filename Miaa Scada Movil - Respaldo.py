@@ -1203,62 +1203,86 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
             st.info("No hay VRPs configuradas para este sector.")
 
         # ==============================================================================
-        # 3. GRÁFICO 3: PUNTOS CRÍTICOS (LEYENDA EN UNA COLUMNA)
+        # 3. GRÁFICO 3: PUNTOS CRÍTICOS (CON LEYENDA HTML DE 3 COLUMNAS IDÉNTICA A VRPs)
         # ==============================================================================
         dict_pc_sec = {k: v for k, v in cargar_puntos_criticos_desde_db().items() if str(v.get('sector')).strip() == str(sec_id).strip()}
-        tags_pc_list = [v['tag_p1'] for v in dict_pc_sec.values() if v.get('tag_p1')]
-        
-        if tags_pc_list:
+        tags_pc_global = []
+        mapeo_pc_global = {}
+
+        for pc_id, pc_info in dict_pc_sec.items():
+            # Usar el domicilio como identificador en lugar de la colonia
+            domicilio_pc = pc_info.get('Domicilio', 'Sin Domicilio')
+            conf_pc_pts = [
+                ('tag_q', f"PC {pc_id} ({domicilio_pc}) - Q", False),
+                ('tag_p1', f"PC {pc_id} ({domicilio_pc}) - P1", True)
+            ]
+            for key_t, lb, sec in conf_pc_pts:
+                t_val = pc_info.get(key_t)
+                if t_val and str(t_val).strip().lower() not in ['0', 'none', 'n/a', 'null']:
+                    tags_pc_global.append(t_val)
+                    mapeo_pc_global[t_val] = {'label': lb, 'sec': sec}
+
+        if tags_pc_global:
             try:
                 engine_h = get_mysql_scada_engine()
-                tags_pc_in = "', '".join(tags_pc_list)
-                q_pc = f"SELECT h.FECHA, h.VALUE, r.NAME as TAG FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME IN ('{tags_pc_in}') AND h.FECHA BETWEEN '{str_f_ini}' AND '{str_f_fin}' ORDER BY h.FECHA ASC"
+                tags_in_pc = "', '".join(list(set(tags_pc_global)))
+                q_pc = f"SELECT h.FECHA, h.VALUE, r.NAME as TAG FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME IN ('{tags_in_pc}') AND h.FECHA BETWEEN '{str_f_ini}' AND '{str_f_fin}' ORDER BY h.FECHA ASC"
                 df_pc_h = pd.read_sql(q_pc, engine_h)
 
                 if not df_pc_h.empty:
-                    st.markdown(f"<h3 style='color:#ff0000; font-size:18px; margin-top:25px; margin-bottom:10px; text-align: center;'>Puntos críticos del sector:</h3>", unsafe_allow_html=True)
-                    
+                    st.markdown(f"<h3 style='color:#ff5555; font-size:20px; margin-top:25px; margin-bottom:10px;'>🚨 Análisis de Puntos Críticos del Sector</h3>", unsafe_allow_html=True)
                     df_pc_h['FECHA'] = pd.to_datetime(df_pc_h['FECHA'])
-                    
+
                     fig_pc = go.Figure()
-                    
                     delta = pd.Timedelta(hours=1)
                     for d in fechas_lineas:
                         es_lunes = (d.dayofweek == 0)
                         fig_pc.add_vrect(x0=d - delta, x1=d + delta, fillcolor="gray", opacity=0.2, layer="below", line_width=0)
-                        fig_pc.add_vline(x=d, line_width=1.5, line_dash="dash", line_color="#fffb00" if es_lunes else "white", opacity=0.5, layer="above")
+                        fig_pc.add_vline(x=d, line_width=1.5, line_dash="dash", line_color="#fffb00" if es_lunes else "white", opacity=0.3, layer="above")
 
-                    tag_to_name = {v['tag_p1']: v.get('Domicilio', 'Sin Domicilio') for v in dict_pc_sec.values()}
+                    idx_pcq = 0
+                    idx_pcp = 0
+                    leyenda_pc_items = []
 
-                    for tag in tags_pc_list:
-                        df_temp = df_pc_h[df_pc_h['TAG'] == tag]
-                        if not df_temp.empty:
+                    for t_name in tags_pc_global:
+                        df_t = df_pc_h[df_pc_h['TAG'] == t_name]
+                        if not df_t.empty:
+                            c_pc = mapeo_pc_global[t_name]
+                            es_caudal_pc = not c_pc['sec']
+                            unidad_final_pc = "kg/cm²" if c_pc['sec'] else "Lps"
+
+                            if es_caudal_pc:
+                                brillo = max(75 - (idx_pcq * 15), 35)
+                                color_pc = f"hsl(200, 100%, {brillo}%)"
+                                idx_pcq += 1
+                            else:
+                                brillo = max(80 - (idx_pcp * 15), 30)
+                                color_pc = f"hsl(0, 100%, {brillo}%)"
+                                idx_pcp += 1
+
                             fig_pc.add_trace(go.Scatter(
-                                x=df_temp['FECHA'], y=df_temp['VALUE'], 
-                                name=tag_to_name.get(tag, tag), mode='lines+markers',
-                                marker=dict(size=4, symbol='circle'), line=dict(width=2),
-                                hovertemplate='<b>%{fullData.name}</b><br>Valor: %{y:.2f} kg<extra></extra>'
+                                x=df_t['FECHA'], y=df_t['VALUE'], name=c_pc['label'],
+                                yaxis="y2" if c_pc['sec'] else "y1", mode='lines+markers',
+                                line=dict(width=1.8, color=color_pc),
+                                marker=dict(size=3 if es_caudal_pc else 4, symbol='circle'),
+                                fill='tozeroy' if es_caudal_pc else None,
+                                fillcolor=color_pc.replace("hsl", "hsla").replace(")", ", 0.12)"),
+                                hovertemplate=f'<b>%{{fullData.name}}</b>: %{{y:.2f}} {unidad_final_pc}<extra></extra>'
                             ))
+                            leyenda_pc_items.append({"label": c_pc['label'], "color": color_pc})
 
                     fig_pc.update_layout(
-                        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=350, width=1800, autosize=False,
-                        # Ajustamos márgenes para dar espacio a la leyenda vertical a la derecha
-                        margin=dict(l=50, r=250, t=40, b=10), hovermode="x unified",
-                        xaxis=dict(
-                            color="white", showgrid=False,
-                            tickvals=ticks_filtrados, ticktext=etiquetas_filtradas, 
-                            tickangle=0, tickformat="%d-%b-%Y %H:%M"
-                        ),
-                        yaxis=dict(tickformat=".2f", color="white"),
-                        # Leyenda en una sola columna vertical a la derecha
-                        legend=dict(
-                            orientation="v", 
-                            yanchor="top", y=1, 
-                            x=1.02, xanchor="left", 
-                            font=dict(color="white", size=11)
-                        )
+                        template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                        height=300, width=1800, autosize=False, margin=dict(t=30, b=30, l=10, r=10), hovermode="x unified", showlegend=False,
+                        xaxis=dict(color="white", showgrid=False, tickvals=ticks_filtrados, ticktext=etiquetas_filtradas, tickangle=0, tickformat="%d-%b-%Y %H:%M"),
+                        yaxis=dict(title="Caudal (Lps)", color="#00d4ff", tickformat=".2f"),
+                        yaxis2=dict(title="Presión (kg)", side="right", overlaying="y", color="#ff5555", showgrid=False, tickformat=".2f")
                     )
-                    
+
+                    st.markdown("<p style='color:#ff5555; font-weight:bold; margin-bottom:5px; font-size:13px;'>Variables en este gráfico de Puntos Críticos:</p>", unsafe_allow_html=True)
+                    items_pc_html = "".join([f'<div style="display:flex; align-items:center; margin-bottom:6px; overflow:hidden;"><span style="height:10px; width:16px; background-color:{item["color"]}; display:inline-block; margin-right:5px; border-radius:2px; flex-shrink:0;"></span><span style="color:white; font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{item["label"]}</span></div>' for item in leyenda_pc_items])
+                    st.markdown(f'<div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 6px 10px; width:100%; margin-bottom:10px;">{items_pc_html}</div>', unsafe_allow_html=True)
+
                     st.markdown('<div class="scrollable-chart">', unsafe_allow_html=True)
                     st.plotly_chart(fig_pc, use_container_width=True)
                     st.markdown('</div>', unsafe_allow_html=True)
