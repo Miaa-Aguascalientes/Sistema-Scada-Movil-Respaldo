@@ -1273,9 +1273,22 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                             leyenda_pc_items.append({"label": c_pc['label'], "color": color_pc})
 
                     fig_pc.update_layout(
-                        template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                        height=300, width=1800, autosize=False, margin=dict(t=30, b=30, l=10, r=10), hovermode="x unified", showlegend=False,
-                        xaxis=dict(color="white", showgrid=False, tickvals=ticks_filtrados, ticktext=etiquetas_filtradas, tickangle=0, tickformat="%d-%b-%Y %H:%M"),
+                        template="plotly_dark", 
+                        paper_bgcolor='rgba(0,0,0,0)', 
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        height=300, 
+                        width=1800, 
+                        autosize=False, 
+                        margin=dict(t=30, b=30, l=10, r=10), 
+                        hovermode="x unified", 
+                        showlegend=False,
+                        # EJE X AUTOMÁTICO: Eliminamos tickvals y ticktext
+                        xaxis=dict(
+                            color="white", 
+                            showgrid=False, 
+                            tickangle=0, 
+                            tickformat="%d-%b-%Y %H:%M"
+                        ),
                         yaxis=dict(title="Caudal (Lps)", color="#00d4ff", tickformat=".2f"),
                         yaxis2=dict(title="Presión (kg)", side="right", overlaying="y", color="#00ff00", showgrid=False, tickformat=".2f")
                     )
