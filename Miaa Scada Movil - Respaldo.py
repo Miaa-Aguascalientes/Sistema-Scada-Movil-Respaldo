@@ -935,7 +935,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
 
 
 # ------------------------------------------------------------------------------ 
-# ZONA : SECTORES (BLOQUE COMPLETO CON DISEÑO ORIGINAL Y GRÁFICOS SEPARADOS) 
+# ZONA : SECTORES (BLOQUE COMPLETO, SEPARADO Y CORREGIDO HASTA HOY 18-AGO-2026) 
 # ------------------------------------------------------------------------------
 elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != "-- Seleccionar --":
     sec_id = st.session_state.activo_id
@@ -961,8 +961,8 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
         opciones_tiempo = ["Hoy", "Ayer", "Últimos 7 días", "Últimos 14 días", "Este Mes", "Último Mes", "Últimos 6 meses", "Personalizado"]
         rango_seleccionado = st.selectbox("Seleccione el periodo a mostrar", opciones_tiempo, index=2, key="rango_tiempo_sec")
         
-        # Lógica de fechas
-        hoy = pd.to_datetime("today").normalize()
+        # Lógica de fechas robusta para incluir el día actual completo sin cortes
+        hoy = pd.Timestamp.now().normalize()
         if rango_seleccionado == "Hoy": f_ini_h, f_fin_h = hoy, hoy
         elif rango_seleccionado == "Ayer": f_ini_h, f_fin_h = hoy - pd.Timedelta(days=1), hoy - pd.Timedelta(days=1)
         elif rango_seleccionado == "Últimos 7 días": f_ini_h, f_fin_h = hoy - pd.Timedelta(days=7), hoy
@@ -978,8 +978,11 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
             f_ini_h = col_f1.date_input("Fecha Inicio", hoy - pd.Timedelta(days=7))
             f_fin_h = col_f2.date_input("Fecha Fin", hoy)
 
+        str_f_ini = pd.to_datetime(f_ini_h).strftime('%Y-%m-%d 00:00:00')
+        str_f_fin = pd.to_datetime(f_fin_h).strftime('%Y-%m-%d 23:59:59')
+
         # ==============================================================================
-        # 1. GRÁFICO 1: PUNTOS DE CONTROL Y POZOS (CON LÍNEAS, LEYENDA EN 3 COLUMNAS Y SCROLL)
+        # 1. GRÁFICO 1: PUNTOS DE CONTROL Y POZOS
         # ==============================================================================
         dict_reg = {k: v for k, v in cargar_puntos_de_control_desde_db().items() if str(v.get('sector')).strip() == str(sec_id).strip()}
         
@@ -1020,7 +1023,7 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
             try:
                 engine_h = get_mysql_scada_engine()
                 tags_unicos = "', '".join(list(set(tags_sector)))
-                q_sec = f"SELECT h.FECHA, h.VALUE, r.NAME as TAG FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME IN ('{tags_unicos}') AND h.FECHA BETWEEN '{f_ini_h} 00:00:00' AND '{f_fin_h} 23:59:59' ORDER BY h.FECHA ASC"
+                q_sec = f"SELECT h.FECHA, h.VALUE, r.NAME as TAG FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME IN ('{tags_unicos}') AND h.FECHA BETWEEN '{str_f_ini}' AND '{str_f_fin}' ORDER BY h.FECHA ASC"
                 df_sec = pd.read_sql(q_sec, engine_h)
                 
                 if not df_sec.empty:
@@ -1132,7 +1135,7 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
             try:
                 engine_h = get_mysql_scada_engine()
                 tags_in_v = "', '".join(list(set(tags_vrp_global)))
-                q_vrp = f"SELECT h.FECHA, h.VALUE, r.NAME as TAG FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME IN ('{tags_in_v}') AND h.FECHA BETWEEN '{f_ini_h} 00:00:00' AND '{f_fin_h} 23:59:59' ORDER BY h.FECHA ASC"
+                q_vrp = f"SELECT h.FECHA, h.VALUE, r.NAME as TAG FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME IN ('{tags_in_v}') AND h.FECHA BETWEEN '{str_f_ini}' AND '{str_f_fin}' ORDER BY h.FECHA ASC"
                 df_v = pd.read_sql(q_vrp, engine_h)
                 
                 if not df_v.empty:
