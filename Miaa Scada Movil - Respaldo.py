@@ -1202,8 +1202,8 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
         else:
             st.info("No hay VRPs configuradas para este sector.")
 
-# ==============================================================================
-        # 3. GRÁFICO 3: PUNTOS CRÍTICOS (DOMICILIO EN LEYENDA Y TÍTULO)
+        # ==============================================================================
+        # 3. GRÁFICO 3: PUNTOS CRÍTICOS (LEYENDA EN UNA COLUMNA)
         # ==============================================================================
         dict_pc_sec = {k: v for k, v in cargar_puntos_criticos_desde_db().items() if str(v.get('sector')).strip() == str(sec_id).strip()}
         tags_pc_list = [v['tag_p1'] for v in dict_pc_sec.values() if v.get('tag_p1')]
@@ -1228,7 +1228,6 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                         fig_pc.add_vrect(x0=d - delta, x1=d + delta, fillcolor="gray", opacity=0.2, layer="below", line_width=0)
                         fig_pc.add_vline(x=d, line_width=1.5, line_dash="dash", line_color="#fffb00" if es_lunes else "white", opacity=0.5, layer="above")
 
-                    # Usar exclusivamente el Domicilio en lugar de la colonia para la leyenda
                     tag_to_name = {v['tag_p1']: v.get('Domicilio', 'Sin Domicilio') for v in dict_pc_sec.values()}
 
                     for tag in tags_pc_list:
@@ -1242,18 +1241,22 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                             ))
 
                     fig_pc.update_layout(
-                        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=300, width=1800, autosize=False,
-                        margin=dict(l=50, r=50, t=40, b=10), hovermode="x unified",
+                        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=350, width=1800, autosize=False,
+                        # Ajustamos márgenes para dar espacio a la leyenda vertical a la derecha
+                        margin=dict(l=50, r=250, t=40, b=10), hovermode="x unified",
                         xaxis=dict(
-                            color="white", 
-                            showgrid=False,
-                            tickvals=ticks_filtrados, 
-                            ticktext=etiquetas_filtradas, 
-                            tickangle=0, 
-                            tickformat="%d-%b-%Y %H:%M"
+                            color="white", showgrid=False,
+                            tickvals=ticks_filtrados, ticktext=etiquetas_filtradas, 
+                            tickangle=0, tickformat="%d-%b-%Y %H:%M"
                         ),
                         yaxis=dict(tickformat=".2f", color="white"),
-                        legend=dict(orientation="h", yanchor="bottom", y=1.05, x=0.5, xanchor="center", font=dict(color="white", size=10))
+                        # Leyenda en una sola columna vertical a la derecha
+                        legend=dict(
+                            orientation="v", 
+                            yanchor="top", y=1, 
+                            x=1.02, xanchor="left", 
+                            font=dict(color="white", size=11)
+                        )
                     )
                     
                     st.markdown('<div class="scrollable-chart">', unsafe_allow_html=True)
