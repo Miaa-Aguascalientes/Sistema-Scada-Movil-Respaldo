@@ -935,7 +935,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
 
 
 # ------------------------------------------------------------------------------ 
-# ZONA : SECTORES (BLOQUE COMPLETO CON GRÁFICOS SEPARADOS) 
+# ZONA : SECTORES (BLOQUE COMPLETO CON DISEÑO ORIGINAL Y GRÁFICOS SEPARADOS) 
 # ------------------------------------------------------------------------------
 elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != "-- Seleccionar --":
     sec_id = st.session_state.activo_id
@@ -956,8 +956,8 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
             st.markdown(f'<div class="card-indicador"><p class="label-indicador">Consumo Mensual</p><p class="value-indicador">{datos_s.get("Cons_m3",0):,.1f} m³</p></div>', unsafe_allow_html=True)
             st.markdown(f'<div class="card-indicador"><p class="label-indicador">Eficiencia / Balance</p><p class="value-indicador">{datos_s.get("Balance_Estimado",0):,.1f}%</p></div>', unsafe_allow_html=True)
             
-        # --- Selector de Fecha ---
-        st.markdown("<h4 style='color:#00d4ff;'>📈 Histórico Puntos de control y Pozos</h4>", unsafe_allow_html=True)
+        # --- Selector de Fecha Compartido ---
+        st.markdown("<h4 style='color:#00d4ff;'>📈 Histórico de Puntos de Control, Pozos y VRPs</h4>", unsafe_allow_html=True)
         opciones_tiempo = ["Hoy", "Ayer", "Últimos 7 días", "Últimos 14 días", "Este Mes", "Último Mes", "Últimos 6 meses", "Personalizado"]
         rango_seleccionado = st.selectbox("Seleccione el periodo a mostrar", opciones_tiempo, index=2, key="rango_tiempo_sec")
         
@@ -978,100 +978,224 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
             f_ini_h = col_f1.date_input("Fecha Inicio", hoy - pd.Timedelta(days=7))
             f_fin_h = col_f2.date_input("Fecha Fin", hoy)
 
-        # ==========================================
-        # 1. GRÁFICO 1: PUNTOS DE CONTROL Y POZOS
-        # ==========================================
+        # ==============================================================================
+        # 1. GRÁFICO 1: PUNTOS DE CONTROL Y POZOS (CON LÍNEAS, LEYENDA EN 3 COLUMNAS Y SCROLL)
+        # ==============================================================================
         dict_reg = {k: v for k, v in cargar_puntos_de_control_desde_db().items() if str(v.get('sector')).strip() == str(sec_id).strip()}
         
         tags_sector = []
         mapeo_config = {}
 
         for r_id, r_info in dict_reg.items():
-            conf = [('tag_q', f"S:{r_id} - Q", '#00d4ff', False), ('tag_p1', f"S:{r_id} - P1", '#00ff00', True), ('tag_p2', f"S:{r_id} - P2", '#ffff00', True)]
-            for k, lb, clr, sec in conf:
-                t = r_info.get(k)
-                if t and str(t).strip().lower() not in ['0', 'none', 'n/a', 'null']:
-                    tags_sector.append(t)
-                    mapeo_config[t] = {'label': lb, 'color': clr, 'sec': sec}
-
+            nombre_disp = f"S:{r_id}"
+            conf_pc = [
+                ('tag_q', f"{nombre_disp} - Q", '#00d4ff', False),
+                ('tag_p1', f"{nombre_disp} - P1", '#00ff00', True),
+                ('tag_p2', f"{nombre_disp} - P2", '#ffff00', True)
+            ]
+            for key_t, lb, clr, sec in conf_pc:
+                tag_v = r_info.get(key_t)
+                if tag_v and str(tag_v).strip().lower() not in ['0', 'none', 'n/a', 'null']:
+                    tags_sector.append(tag_v)
+                    mapeo_config[tag_v] = {'label': lb, 'color': clr, 'sec': sec}
+                    
+        if 'mapa_pozos_dict' in globals():
+            ids_p_sector = [id_p for id_p, p_info in mapa_pozos_dict.items() if str(p_info.get('sector')).strip() == str(sec_id).strip() or str(sec_id).lower() in str(p_info.get('sector', '')).lower() or str(id_p).strip() == "P156"]
+            
+            for id_p in ids_p_sector:
+                if id_p in mapa_pozos_dict:
+                    p_info = mapa_pozos_dict[id_p]
+                    conf_pz = [
+                        ('caudal', f"Pozo {id_p} - Q", '#00d4ff', False),
+                        ('presion', f"Pozo {id_p} - P", '#00ff00', True),
+                        ('nivel_tanque', f"Pozo {id_p} - Nivel", '#0000FF', True)
+                    ]
+                    for key_t, lb, clr, sec in conf_pz:
+                        tag_v = p_info.get(key_t)
+                        if tag_v and str(tag_v).strip().lower() not in ['0', 'none', 'n/a', 'null']:
+                            tags_sector.append(tag_v)
+                            mapeo_config[tag_v] = {'label': lb, 'color': clr, 'sec': sec}
+                
         if tags_sector:
             try:
                 engine_h = get_mysql_scada_engine()
-                tags_query = "', '".join(list(set(tags_sector)))
-                q = f"SELECT h.FECHA, h.VALUE, r.NAME as TAG FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME IN ('{tags_query}') AND h.FECHA BETWEEN '{f_ini_h} 00:00:00' AND '{f_fin_h} 23:59:59' ORDER BY h.FECHA ASC"
-                df_sec = pd.read_sql(q, engine_h)
+                tags_unicos = "', '".join(list(set(tags_sector)))
+                q_sec = f"SELECT h.FECHA, h.VALUE, r.NAME as TAG FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME IN ('{tags_unicos}') AND h.FECHA BETWEEN '{f_ini_h} 00:00:00' AND '{f_fin_h} 23:59:59' ORDER BY h.FECHA ASC"
+                df_sec = pd.read_sql(q_sec, engine_h)
                 
                 if not df_sec.empty:
-                    fig_sec = go.Figure()
-                    for tag_name in tags_sector:
-                        df_t = df_sec[df_sec['TAG'] == tag_name]
-                        if not df_t.empty:
-                            cfg = mapeo_config[tag_name]
-                            fig_sec.add_trace(go.Scatter(
-                                x=df_t['FECHA'], y=df_t['VALUE'], name=cfg['label'],
-                                yaxis="y2" if cfg['sec'] else "y1", mode='lines',
-                                line=dict(color=cfg['color'], width=1.5)
-                            ))
+                    df_sec['FECHA'] = pd.to_datetime(df_sec['FECHA'])
                     
+                    dias_es = {0: 'Lun', 1: 'Mar', 2: 'Mié', 3: 'Jue', 4: 'Vie', 5: 'Sáb', 6: 'Dom'}
+                    meses_es = {1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr', 5: 'May', 6: 'Jun', 7: 'Jul', 8: 'Ago', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dic'}
+
+                    fechas_lineas = pd.date_range(start=df_sec['FECHA'].min().floor('D'), end=df_sec['FECHA'].max().ceil('D'), freq='D')
+                    num_dias = len(fechas_lineas)
+                    paso = 1 if num_dias <= 15 else (2 if num_dias <= 30 else 5)
+                    ticks_filtrados = fechas_lineas[::paso]
+
+                    etiquetas_filtradas = [
+                        f"{d.strftime('%H:%M')}<br>{dias_es[d.dayofweek]} {d.day}-{meses_es[d.month]}-{d.year}"
+                        for d in ticks_filtrados
+                    ]
+                
+                    fig_sec = go.Figure()
+                    idx_q = 0
+                    idx_p = 0
+                    leyendaitems = []
+
+                    for tag_name in tags_sector:
+                        df_tag = df_sec[df_sec['TAG'] == tag_name]
+                        if not df_tag.empty:
+                            cfg = mapeo_config[tag_name]
+                            es_caudal = not cfg['sec']
+                            label_u = cfg['label'].upper()
+
+                            unidad_pc = "Lps" if es_caudal else ("Mts" if "NIVEL" in label_u or "TANQUE" in label_u or "MTS" in label_u else "kg/cm²")
+                            
+                            if es_caudal:
+                                brillo = max(75 - (idx_q * 15), 35) 
+                                color_base = f"hsl(200, 100%, {brillo}%)" 
+                                idx_q += 1
+                            else:
+                                brillo = max(80 - (idx_p * 20), 0)
+                                color_base = f"hsl(145, 100%, {brillo}%)"
+                                idx_p += 1
+
+                            fig_sec.add_trace(go.Scatter(
+                                x=df_tag['FECHA'], y=df_tag['VALUE'], name=cfg['label'], 
+                                yaxis="y2" if cfg['sec'] else "y1", mode='lines+markers',
+                                line=dict(width=1.8, color=color_base),
+                                marker=dict(size=3, symbol='circle'),
+                                fill='tozeroy' if es_caudal else None,
+                                fillcolor=color_base.replace("hsl", "hsla").replace(")", ", 0.15)"),
+                                hovertemplate='<b>%{fullData.name}</b>: %{y:.2f} ' + unidad_pc + '<extra></extra>'
+                            ))
+                            leyendaitems.append({"label": cfg['label'], "color": color_base})
+
+                    delta = pd.Timedelta(hours=1)
+                    for d in fechas_lineas:
+                        es_lunes = (d.dayofweek == 0)
+                        fig_sec.add_vrect(x0=d - delta, x1=d + delta, fillcolor="gray", opacity=0.2, layer="below", line_width=0)
+                        fig_sec.add_vline(x=d, line_width=1.5, line_dash="dash", line_color="#fffb00" if es_lunes else "white", opacity=0.5, layer="above")
+                
                     fig_sec.update_layout(
-                        template="plotly_dark", height=380, hovermode="x unified",
-                        yaxis=dict(title="Caudal (Lps)", side="left"),
-                        yaxis2=dict(title="Presión / Nivel", side="right", overlaying="y")
+                        template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
+                        hovermode="x unified", height=300, width=1800, autosize=False, margin=dict(t=30, b=30, l=10, r=10), showlegend=False,
+                        xaxis=dict(color="white", showgrid=False, tickvals=ticks_filtrados, ticktext=etiquetas_filtradas, tickangle=0, tickformat="%d-%b-%Y %H:%M"),
+                        yaxis=dict(title="Caudales (m³/h)", color="#00d4ff", tickformat=".2f"),
+                        yaxis2=dict(title="Presiones / Niveles", overlaying="y", side="right", color="#00ff00", showgrid=False, tickformat=".2f")
                     )
+                    
+                    st.markdown("<p style='color:#00d4ff; font-weight:bold; margin-bottom:5px; font-size:13px;'>Variables en Puntos de Control y Pozos:</p>", unsafe_allow_html=True)
+                    items_html = "".join([f'<div style="display:flex; align-items:center; margin-bottom:6px; overflow:hidden;"><span style="height:10px; width:16px; background-color:{item["color"]}; display:inline-block; margin-right:5px; border-radius:2px; flex-shrink:0;"></span><span style="color:white; font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{item["label"]}</span></div>' for item in leyendaitems])
+                    st.markdown(f'<div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 6px 10px; width:100%; margin-bottom:10px;">{items_html}</div>', unsafe_allow_html=True)
+
+                    st.markdown("""
+                        <style>
+                        .scrollable-chart { overflow-x: auto; width: 100%; padding-bottom: 15px; }
+                        .scrollable-chart > div { min-width: 1200px; }
+                        </style>
+                    """, unsafe_allow_html=True)
+                    
+                    st.markdown('<div class="scrollable-chart">', unsafe_allow_html=True)
                     st.plotly_chart(fig_sec, use_container_width=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
                 else:
-                    st.info("Sin datos telemétricos para Puntos de Control en este rango.")
+                    st.info("Sin registros telemétricos en el rango de fechas seleccionado para Puntos de Control.")
             except Exception as e:
-                st.error(f"Error cargando telemetría de Puntos de Control: {e}")
+                st.error(f"Error Scada Puntos de Control: {e}")
         else:
-            st.info("No hay Puntos de Control vinculados a este sector.")
+            st.info("No hay puntos de control ni pozos vinculados a este sector.")
 
-        # ==========================================
-        # 2. GRÁFICO 2: VRPs (EXCLUSIVO E INDEPENDIENTE)
-        # ==========================================
-        st.markdown("<h4 style='color:#00ffcc; margin-top:20px;'>🎛️ Histórico de VRPs del Sector</h4>", unsafe_allow_html=True)
-        
+        # ==============================================================================
+        # 2. GRÁFICO 2: VRPs (INDEPENDIENTE, MISMO DISEÑO, 3 COLUMNAS Y SCROLL)
+        # ==============================================================================
         dict_vrp_sec = {k: v for k, v in cargar_vrp_desde_db().items() if str(v.get('sector')).strip() == str(sec_id).strip()}
-        tags_vrp = []
-        mapeo_vrp = {}
-
+        tags_vrp_global = []
+        mapeo_vrp_global = {}
+        
         for v_id, v_info in dict_vrp_sec.items():
-            conf_vrp = [('tag_q', f"VRP {v_id} - Q", '#ff9900', False), ('tag_p1', f"VRP {v_id} - P1", '#ff00ff', True), ('tag_p2', f"VRP {v_id} - P2", '#ffcc00', True)]
-            for k, lb, clr, sec in conf_vrp:
-                t = v_info.get(k)
-                if t and str(t).strip().lower() not in ['0', 'none', 'n/a', 'null']:
-                    tags_vrp.append(t)
-                    mapeo_vrp[t] = {'label': lb, 'color': clr, 'sec': sec}
+            identificador = f"VRP {v_id}" 
+            conf_vrp = [
+                ('tag_q', f"{identificador} - Q", False),
+                ('tag_p1', f"{identificador} - P1", True),
+                ('tag_p2', f"{identificador} - P2", True)
+            ]
+            for key_t, lb, sec in conf_vrp:
+                t_val = v_info.get(key_t)
+                if t_val and str(t_val).strip().lower() not in ['0', 'none', 'n/a', 'null']:
+                    tags_vrp_global.append(t_val)
+                    mapeo_vrp_global[t_val] = {'label': lb, 'sec': sec}
 
-        if tags_vrp:
+        if tags_vrp_global:
             try:
                 engine_h = get_mysql_scada_engine()
-                tags_vrp_query = "', '".join(list(set(tags_vrp)))
-                q_vrp = f"SELECT h.FECHA, h.VALUE, r.NAME as TAG FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME IN ('{tags_vrp_query}') AND h.FECHA BETWEEN '{f_ini_h} 00:00:00' AND '{f_fin_h} 23:59:59' ORDER BY h.FECHA ASC"
-                df_vrp = pd.read_sql(q_vrp, engine_h)
+                tags_in_v = "', '".join(list(set(tags_vrp_global)))
+                q_vrp = f"SELECT h.FECHA, h.VALUE, r.NAME as TAG FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME IN ('{tags_in_v}') AND h.FECHA BETWEEN '{f_ini_h} 00:00:00' AND '{f_fin_h} 23:59:59' ORDER BY h.FECHA ASC"
+                df_v = pd.read_sql(q_vrp, engine_h)
                 
-                if not df_vrp.empty:
-                    fig_vrp = go.Figure()
-                    for tag_name in tags_vrp:
-                        df_t = df_vrp[df_vrp['TAG'] == tag_name]
-                        if not df_t.empty:
-                            cfg = mapeo_vrp[tag_name]
-                            fig_vrp.add_trace(go.Scatter(
-                                x=df_t['FECHA'], y=df_t['VALUE'], name=cfg['label'],
-                                yaxis="y2" if cfg['sec'] else "y1", mode='lines',
-                                line=dict(color=cfg['color'], width=1.5)
-                            ))
+                if not df_v.empty:
+                    st.markdown(f"<h3 style='color:#00ffcc; font-size:20px; margin-top:25px; margin-bottom:10px;'>🎛️ Análisis Integral de VRPs del Sector</h3>", unsafe_allow_html=True)
+                    df_v['FECHA'] = pd.to_datetime(df_v['FECHA'])
                     
-                    fig_vrp.update_layout(
-                        template="plotly_dark", height=380, hovermode="x unified",
-                        yaxis=dict(title="Caudal VRP (Lps)", side="left"),
-                        yaxis2=dict(title="Presión VRP (kg/cm²)", side="right", overlaying="y")
+                    fig_v = go.Figure()
+                    delta = pd.Timedelta(hours=1)
+                    for d in fechas_lineas:
+                        es_lunes = (d.dayofweek == 0)
+                        fig_v.add_vrect(x0=d - delta, x1=d + delta, fillcolor="gray", opacity=0.2, layer="below", line_width=0)
+                        fig_v.add_vline(x=d, line_width=1.5, line_dash="dash", line_color="#fffb00" if es_lunes else "white", opacity=0.3, layer="above")
+                    
+                    idx_vq = 0
+                    idx_vp = 0
+                    leyenda_vrp_items = []
+
+                    for t_name in tags_vrp_global:
+                        df_t = df_v[df_v['TAG'] == t_name]
+                        if not df_t.empty:
+                            c_vrp = mapeo_vrp_global[t_name]
+                            es_caudal_v = not c_vrp['sec']
+                            unidad_final = "kg/cm²" if ("P1" in c_vrp['label'] or "P2" in c_vrp['label']) else "Lps"
+                            
+                            if es_caudal_v:
+                                brillo = max(75 - (idx_vq * 15), 35)
+                                color_v = f"hsl(200, 100%, {brillo}%)" 
+                                idx_vq += 1
+                            else:
+                                brillo = max(80 - (idx_vp * 15), 30)
+                                color_v = f"hsl(150, 100%, {brillo}%)"
+                                idx_vp += 1
+
+                            fig_v.add_trace(go.Scatter(
+                                x=df_t['FECHA'], y=df_t['VALUE'], name=c_vrp['label'], 
+                                yaxis="y2" if c_vrp['sec'] else "y1", mode='lines+markers',
+                                line=dict(width=1.8, color=color_v),
+                                marker=dict(size=3 if es_caudal_v else 4, symbol='circle'),
+                                fill='tozeroy' if es_caudal_v else None,
+                                fillcolor=color_v.replace("hsl", "hsla").replace(")", ", 0.12)"),
+                                hovertemplate=f'<b>%{{fullData.name}}</b>: %{{y:.2f}} {unidad_final}<extra></extra>'
+                            ))
+                            leyenda_vrp_items.append({"label": c_vrp['label'], "color": color_v})
+
+                    fig_v.update_layout(
+                        template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
+                        height=300, width=1800, autosize=False, margin=dict(t=30, b=30, l=10, r=10), hovermode="x unified", showlegend=False,
+                        xaxis=dict(color="white", showgrid=False, tickvals=ticks_filtrados, ticktext=etiquetas_filtradas, tickangle=0, tickformat="%d-%b-%Y %H:%M"),
+                        yaxis=dict(title="Caudal (Lps)", color="#00d4ff", tickformat=".2f"),
+                        yaxis2=dict(title="Presión (kg)", side="right", overlaying="y", color="#00ff00", showgrid=False, tickformat=".2f")
                     )
-                    st.plotly_chart(fig_vrp, use_container_width=True)
+                    
+                    st.markdown("<p style='color:#00ffcc; font-weight:bold; margin-bottom:5px; font-size:13px;'>Variables en este gráfico de VRPs:</p>", unsafe_allow_html=True)
+                    items_vrp_html = "".join([f'<div style="display:flex; align-items:center; margin-bottom:6px; overflow:hidden;"><span style="height:10px; width:16px; background-color:{item["color"]}; display:inline-block; margin-right:5px; border-radius:2px; flex-shrink:0;"></span><span style="color:white; font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{item["label"]}</span></div>' for item in leyenda_vrp_items])
+                    st.markdown(f'<div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 6px 10px; width:100%; margin-bottom:10px;">{items_vrp_html}</div>', unsafe_allow_html=True)
+
+                    st.markdown('<div class="scrollable-chart">', unsafe_allow_html=True)
+                    st.plotly_chart(fig_v, use_container_width=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
                 else:
-                    st.info("Sin datos telemétricos para las VRPs en este rango.")
+                    st.info("No se encontraron registros telemétricos para las VRPs en este sector.")
             except Exception as e:
-                st.error(f"Error cargando telemetría de VRPs: {e}")
+                st.error(f"Error Scada VRP: {e}")
         else:
             st.info("No hay VRPs configuradas para este sector.")
 
