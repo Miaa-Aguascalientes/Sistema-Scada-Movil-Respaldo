@@ -1203,13 +1203,14 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
             st.info("No hay VRPs configuradas para este sector.")
 
         # ==============================================================================
-        # 3. GRÁFICO 3: PUNTOS CRÍTICOS (EJE X AUTOMÁTICO FECHA Y HORA)
+        # 3. GRÁFICO 3: PUNTOS CRÍTICOS (LEYENDA EN UNA COLUMNA)
         # ==============================================================================
         dict_pc_sec = {k: v for k, v in cargar_puntos_criticos_desde_db().items() if str(v.get('sector')).strip() == str(sec_id).strip()}
         tags_pc_global = []
         mapeo_pc_global = {}
 
         for pc_id, pc_info in dict_pc_sec.items():
+            # Usar el domicilio como identificador
             domicilio_pc = pc_info.get('Domicilio', 'Sin Domicilio')
             conf_pc_pts = [
                 ('tag_q', f"PC {pc_id} ({domicilio_pc}) - Q", False),
@@ -1255,6 +1256,7 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                                 color_pc = f"hsl(200, 100%, {brillo}%)"
                                 idx_pcq += 1
                             else:
+                                # Presiones en gama de verdes
                                 brillo = max(80 - (idx_pcp * 20), 0)
                                 color_pc = f"hsl(145, 100%, {brillo}%)"
                                 idx_pcp += 1
@@ -1273,19 +1275,13 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                     fig_pc.update_layout(
                         template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                         height=300, width=1800, autosize=False, margin=dict(t=30, b=30, l=10, r=10), hovermode="x unified", showlegend=False,
-                        # Eje X con manejo automático inteligente de fecha y hora para evitar amontonamiento
-                        xaxis=dict(
-                            color="white", 
-                            showgrid=False, 
-                            tickangle=0,
-                            type="date",
-                            tickautodefault=True
-                        ),
+                        xaxis=dict(color="white", showgrid=False, tickvals=ticks_filtrados, ticktext=etiquetas_filtradas, tickangle=0, tickformat="%d-%b-%Y %H:%M"),
                         yaxis=dict(title="Caudal (Lps)", color="#00d4ff", tickformat=".2f"),
                         yaxis2=dict(title="Presión (kg)", side="right", overlaying="y", color="#00ff00", showgrid=False, tickformat=".2f")
                     )
 
                     st.markdown("<p style='color:#ff5555; font-weight:bold; margin-bottom:5px; font-size:13px;'>Variables en este gráfico de Puntos Críticos:</p>", unsafe_allow_html=True)
+                    # AQUÍ: grid-template-columns: repeat(1, 1fr) fuerza una sola columna
                     items_pc_html = "".join([f'<div style="display:flex; align-items:center; margin-bottom:6px; overflow:hidden;"><span style="height:10px; width:16px; background-color:{item["color"]}; display:inline-block; margin-right:5px; border-radius:2px; flex-shrink:0;"></span><span style="color:white; font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{item["label"]}</span></div>' for item in leyenda_pc_items])
                     st.markdown(f'<div style="display:grid; grid-template-columns: repeat(1, 1fr); gap: 6px 10px; width:100%; margin-bottom:10px;">{items_pc_html}</div>', unsafe_allow_html=True)
 
