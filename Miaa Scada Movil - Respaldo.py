@@ -935,7 +935,7 @@ elif st.session_state.activo_tipo == "Rebombeo" and st.session_state.activo_id !
 
 
 # ------------------------------------------------------------------------------ 
-# ZONA : SECTORES (BLOQUE COMPLETO Y INTEGRADO) 
+# ZONA : SECTORES (BLOQUE COMPLETO CON GRÁFICOS SEPARADOS) 
 # ------------------------------------------------------------------------------
 elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != "-- Seleccionar --":
     sec_id = st.session_state.activo_id
@@ -957,7 +957,7 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
             st.markdown(f'<div class="card-indicador"><p class="label-indicador">Eficiencia / Balance</p><p class="value-indicador">{datos_s.get("Balance_Estimado",0):,.1f}%</p></div>', unsafe_allow_html=True)
             
         # --- Selector de Fecha ---
-        st.markdown("<h4 style='color:#00d4ff;'>📈 Histórico Puntos de control, Pozos y VRPs</h4>", unsafe_allow_html=True)
+        st.markdown("<h4 style='color:#00d4ff;'>📈 Histórico Puntos de control y Pozos</h4>", unsafe_allow_html=True)
         opciones_tiempo = ["Hoy", "Ayer", "Últimos 7 días", "Últimos 14 días", "Este Mes", "Último Mes", "Últimos 6 meses", "Personalizado"]
         rango_seleccionado = st.selectbox("Seleccione el periodo a mostrar", opciones_tiempo, index=2, key="rango_tiempo_sec")
         
@@ -978,14 +978,14 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
             f_ini_h = col_f1.date_input("Fecha Inicio", hoy - pd.Timedelta(days=7))
             f_fin_h = col_f2.date_input("Fecha Fin", hoy)
 
-        # --- Carga y Filtrado de Datos (Puntos, Pozos y VRPs) ---
+        # ==========================================
+        # 1. GRÁFICO 1: PUNTOS DE CONTROL Y POZOS
+        # ==========================================
         dict_reg = {k: v for k, v in cargar_puntos_de_control_desde_db().items() if str(v.get('sector')).strip() == str(sec_id).strip()}
-        dict_vrp_sec = {k: v for k, v in cargar_vrp_desde_db().items() if str(v.get('sector')).strip() == str(sec_id).strip()}
         
         tags_sector = []
         mapeo_config = {}
 
-        # 1. Puntos de Control
         for r_id, r_info in dict_reg.items():
             conf = [('tag_q', f"S:{r_id} - Q", '#00d4ff', False), ('tag_p1', f"S:{r_id} - P1", '#00ff00', True), ('tag_p2', f"S:{r_id} - P2", '#ffff00', True)]
             for k, lb, clr, sec in conf:
@@ -994,16 +994,6 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                     tags_sector.append(t)
                     mapeo_config[t] = {'label': lb, 'color': clr, 'sec': sec}
 
-        # 2. VRPs (Integradas al mismo array de tags)
-        for v_id, v_info in dict_vrp_sec.items():
-            conf_vrp = [('tag_q', f"VRP {v_id} - Q", '#ff9900', False), ('tag_p1', f"VRP {v_id} - P1", '#ff00ff', True), ('tag_p2', f"VRP {v_id} - P2", '#ffcc00', True)]
-            for k, lb, clr, sec in conf_vrp:
-                t = v_info.get(k)
-                if t and str(t).strip().lower() not in ['0', 'none', 'n/a', 'null']:
-                    tags_sector.append(t)
-                    mapeo_config[t] = {'label': lb, 'color': clr, 'sec': sec}
-
-        # --- Consulta a BD y Generación de Gráfico ---
         if tags_sector:
             try:
                 engine_h = get_mysql_scada_engine()
@@ -1012,29 +1002,78 @@ elif st.session_state.activo_tipo == "Sector" and st.session_state.activo_id != 
                 df_sec = pd.read_sql(q, engine_h)
                 
                 if not df_sec.empty:
-                    fig = go.Figure()
+                    fig_sec = go.Figure()
                     for tag_name in tags_sector:
                         df_t = df_sec[df_sec['TAG'] == tag_name]
                         if not df_t.empty:
                             cfg = mapeo_config[tag_name]
-                            fig.add_trace(go.Scatter(
+                            fig_sec.add_trace(go.Scatter(
                                 x=df_t['FECHA'], y=df_t['VALUE'], name=cfg['label'],
                                 yaxis="y2" if cfg['sec'] else "y1", mode='lines',
                                 line=dict(color=cfg['color'], width=1.5)
                             ))
                     
-                    fig.update_layout(
-                        template="plotly_dark", height=450, hovermode="x unified",
+                    fig_sec.update_layout(
+                        template="plotly_dark", height=380, hovermode="x unified",
                         yaxis=dict(title="Caudal (Lps)", side="left"),
-                        yaxis2=dict(title="Presión (kg/cm²)", side="right", overlaying="y")
+                        yaxis2=dict(title="Presión / Nivel", side="right", overlaying="y")
                     )
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig_sec, use_container_width=True)
                 else:
-                    st.info("Sin datos para el rango seleccionado.")
+                    st.info("Sin datos telemétricos para Puntos de Control en este rango.")
             except Exception as e:
-                st.error(f"Error cargando telemetría: {e}")
+                st.error(f"Error cargando telemetría de Puntos de Control: {e}")
         else:
-            st.warning("No hay dispositivos (Puntos de control o VRPs) configurados para este sector.")
+            st.info("No hay Puntos de Control vinculados a este sector.")
+
+        # ==========================================
+        # 2. GRÁFICO 2: VRPs (EXCLUSIVO E INDEPENDIENTE)
+        # ==========================================
+        st.markdown("<h4 style='color:#00ffcc; margin-top:20px;'>🎛️ Histórico de VRPs del Sector</h4>", unsafe_allow_html=True)
+        
+        dict_vrp_sec = {k: v for k, v in cargar_vrp_desde_db().items() if str(v.get('sector')).strip() == str(sec_id).strip()}
+        tags_vrp = []
+        mapeo_vrp = {}
+
+        for v_id, v_info in dict_vrp_sec.items():
+            conf_vrp = [('tag_q', f"VRP {v_id} - Q", '#ff9900', False), ('tag_p1', f"VRP {v_id} - P1", '#ff00ff', True), ('tag_p2', f"VRP {v_id} - P2", '#ffcc00', True)]
+            for k, lb, clr, sec in conf_vrp:
+                t = v_info.get(k)
+                if t and str(t).strip().lower() not in ['0', 'none', 'n/a', 'null']:
+                    tags_vrp.append(t)
+                    mapeo_vrp[t] = {'label': lb, 'color': clr, 'sec': sec}
+
+        if tags_vrp:
+            try:
+                engine_h = get_mysql_scada_engine()
+                tags_vrp_query = "', '".join(list(set(tags_vrp)))
+                q_vrp = f"SELECT h.FECHA, h.VALUE, r.NAME as TAG FROM vfitagnumhistory h JOIN VfiTagRef r ON h.GATEID = r.GATEID WHERE r.NAME IN ('{tags_vrp_query}') AND h.FECHA BETWEEN '{f_ini_h} 00:00:00' AND '{f_fin_h} 23:59:59' ORDER BY h.FECHA ASC"
+                df_vrp = pd.read_sql(q_vrp, engine_h)
+                
+                if not df_vrp.empty:
+                    fig_vrp = go.Figure()
+                    for tag_name in tags_vrp:
+                        df_t = df_vrp[df_vrp['TAG'] == tag_name]
+                        if not df_t.empty:
+                            cfg = mapeo_vrp[tag_name]
+                            fig_vrp.add_trace(go.Scatter(
+                                x=df_t['FECHA'], y=df_t['VALUE'], name=cfg['label'],
+                                yaxis="y2" if cfg['sec'] else "y1", mode='lines',
+                                line=dict(color=cfg['color'], width=1.5)
+                            ))
+                    
+                    fig_vrp.update_layout(
+                        template="plotly_dark", height=380, hovermode="x unified",
+                        yaxis=dict(title="Caudal VRP (Lps)", side="left"),
+                        yaxis2=dict(title="Presión VRP (kg/cm²)", side="right", overlaying="y")
+                    )
+                    st.plotly_chart(fig_vrp, use_container_width=True)
+                else:
+                    st.info("Sin datos telemétricos para las VRPs en este rango.")
+            except Exception as e:
+                st.error(f"Error cargando telemetría de VRPs: {e}")
+        else:
+            st.info("No hay VRPs configuradas para este sector.")
 
 
     # -------------------------------------------------------------------------Parte final ---- -----------------------------------------------------------------------------------    
