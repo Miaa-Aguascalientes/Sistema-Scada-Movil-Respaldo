@@ -3,7 +3,7 @@ import hashlib
 import json
 import time
 import urllib.parse
-from zoneinfo5 import ZoneInfo
+from zoneinfo import ZoneInfo
 import bcrypt
 from cryptography.fernet import Fernet
 import pandas as pd
