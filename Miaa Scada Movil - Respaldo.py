@@ -5,6 +5,7 @@ import time
 import urllib.parse
 from zoneinfo import ZoneInfo
 import bcrypt
+import base64
 from cryptography.fernet import Fernet
 import pandas as pd
 import psycopg2
