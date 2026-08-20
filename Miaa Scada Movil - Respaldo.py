@@ -13,6 +13,7 @@ import pytz
 import streamlit as st
 import streamlit.components.v1 as components
 from sqlalchemy import create_engine, event, text
+import plotly.graph_objects as go
 
 # Configuración de página optimizada para móviles
 st.set_page_config(
